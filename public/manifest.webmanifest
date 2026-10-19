@@ -1,0 +1,10 @@
+{
+  "name": "FD SST",
+  "short_name": "FD SST",
+  "description": "Gestão de Segurança e Saúde no Trabalho",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F5F6F8",
+  "theme_color": "#141719",
+  "icons": [{ "src": "fd-sst-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

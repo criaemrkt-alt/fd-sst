@@ -1,0 +1,10 @@
+project_id = "fd-sst"
+
+[functions.bootstrap-master]
+verify_jwt = true
+
+[functions.confirm-appointment]
+verify_jwt = false
+
+[functions.invite-member]
+verify_jwt = true
