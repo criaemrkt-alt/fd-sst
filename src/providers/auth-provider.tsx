@@ -9,6 +9,7 @@ type AuthState = {
   profile: Profile | null
   memberships: Membership[]
   loading: boolean
+  identityError: string | null
   configured: boolean
   refreshIdentity: () => Promise<void>
 }
@@ -20,14 +21,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [memberships, setMemberships] = useState<Membership[]>([])
   const [loading, setLoading] = useState(hasSupabaseConfiguration)
+  const [identityError, setIdentityError] = useState<string | null>(null)
 
-  const refreshIdentity = async () => {
+  const refreshIdentity = async (providedSession?: Session | null) => {
     if (!supabase) return
-    const { data: { session: nextSession } } = await supabase.auth.getSession()
+    const nextSession = providedSession === undefined
+      ? (await supabase.auth.getSession()).data.session
+      : providedSession
     setSession(nextSession)
     if (!nextSession?.user) {
       setProfile(null)
       setMemberships([])
+      setIdentityError(null)
       setLoading(false)
       return
     }
@@ -35,26 +40,37 @@ export function AuthProvider({ children }: PropsWithChildren) {
       supabase.from('profiles').select('id, full_name, global_role, active').eq('id', nextSession.user.id).single(),
       supabase.from('company_memberships').select('id, company_id, user_id, role, active, job_title, companies(id, name)').eq('user_id', nextSession.user.id).eq('active', true),
     ])
+    if (profileResponse.error) {
+      setProfile(null)
+      setMemberships([])
+      setIdentityError('Não foi possível validar seu acesso agora. Atualize a página e tente novamente.')
+      setLoading(false)
+      return
+    }
     setProfile(profileResponse.data as Profile | null)
     const normalizedMemberships = (membershipsResponse.data ?? []).map((membership: any) => ({
       ...membership,
       companies: Array.isArray(membership.companies) ? membership.companies[0] ?? null : membership.companies,
     }))
     setMemberships(normalizedMemberships as Membership[])
+    setIdentityError(null)
     setLoading(false)
   }
 
   useEffect(() => {
     if (!supabase) return
     void refreshIdentity()
-    const { data: listener } = supabase.auth.onAuthStateChange(() => void refreshIdentity())
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      // Evita consultar o Auth enquanto o próprio evento de autenticação ainda está em execução.
+      window.setTimeout(() => void refreshIdentity(nextSession), 0)
+    })
     return () => listener.subscription.unsubscribe()
   }, [])
 
   const value = useMemo<AuthState>(() => ({
-    session, user: session?.user ?? null, profile, memberships, loading,
+    session, user: session?.user ?? null, profile, memberships, loading, identityError,
     configured: hasSupabaseConfiguration, refreshIdentity,
-  }), [session, profile, memberships, loading])
+  }), [session, profile, memberships, loading, identityError])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
