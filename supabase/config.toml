@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.invite-member]
 verify_jwt = true
+
+[functions.manage-company-access]
+verify_jwt = true
