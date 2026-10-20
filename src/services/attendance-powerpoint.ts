@@ -74,7 +74,7 @@ function noteLabel(kind?: string) {
   return ({ general: 'Informação geral', issue: 'Problema identificado', guidance: 'Orientação fornecida', recommendation: 'Recomendação geral', pending: 'Pendência' } as Record<string, string>)[kind || ''] || 'Observação'
 }
 
-export async function generateAttendancePowerPoint({ appointment, content }: { appointment: Appointment; content: AttendanceContent }) {
+export async function generateAttendancePowerPoint({ appointment, content, includeChecklist = false }: { appointment: Appointment; content: AttendanceContent; includeChecklist?: boolean }) {
   const pptx = new PptxGenJS()
   pptx.layout = 'LAYOUT_WIDE'
   pptx.author = 'FD SST'
@@ -145,7 +145,7 @@ export async function generateAttendancePowerPoint({ appointment, content }: { a
       return `${title} · ${item.prompt}\n${answerLabel(answer?.answer?.status)}${answer?.note ? ` — ${answer.note}` : ''}`
     })
   })
-  if (checklistLines.length) {
+  if (includeChecklist && checklistLines.length) {
     for (const [index, page] of chunks(checklistLines, 6).entries()) {
       const slide = pptx.addSlide()
       addHeader(slide, 'Conferência técnica', clientName)
@@ -213,7 +213,7 @@ export async function generateAttendancePowerPoint({ appointment, content }: { a
     }
   }
 
-  if (!content.evidence.length && !content.activities.length && !content.checklists.length && !content.notes.length && !content.services.length) {
+  if (!content.evidence.length && !content.activities.length && (!includeChecklist || !content.checklists.length) && !content.notes.length && !content.services.length) {
     const slide = pptx.addSlide()
     addHeader(slide, 'Registros técnicos', clientName)
     addSectionTitle(slide, 'Atendimento finalizado sem registros adicionais')
