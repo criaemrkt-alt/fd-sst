@@ -1743,3 +1743,9 @@ button:disabled {
     white-space: normal;
   }
 }
+
+@media (max-width: 800px) {
+  .admin-layout {
+    display: block;
+  }
+}
