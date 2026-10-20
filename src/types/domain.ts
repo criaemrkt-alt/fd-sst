@@ -32,6 +32,7 @@ export interface Client {
   state: string | null
   postal_code: string | null
   cnae_code: string | null
+  cnae_input?: string | null
   business_activity: string | null
   risk_grade: number | null
   cnae_description_snapshot: string | null

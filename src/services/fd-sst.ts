@@ -15,7 +15,7 @@ export async function listClients(companyId: string, search = '') {
 }
 
 export async function saveClient(input: Partial<Client> & Pick<Client, 'company_id' | 'name'>) {
-  const payload = { ...input, cnpj: input.cnpj?.replace(/\D/g, '') || null, cnae_code: input.cnae_code?.replace(/\D/g, '') || null }
+  const payload = { ...input, cnpj: input.cnpj?.replace(/\D/g, '') || null, cnae_input: input.cnae_input?.replace(/\D/g, '') || null }
   const { data, error } = input.id
     ? await client().from('clients').update(payload).eq('id', input.id).select().single()
     : await client().from('clients').insert(payload).select().single()
@@ -92,9 +92,54 @@ export async function createTechnicianClient(input: Pick<Client, 'company_id' | 
     address_line: input.address_line,
     city: input.city,
     state: input.state,
+    legal_name: input.legal_name,
+    cnpj: input.cnpj,
+    email: input.email,
+    cnae_input: input.cnae_input,
+    business_activity: input.business_activity,
   })
 }
 
 export async function updateTechnicianAppointmentStatus(appointment: Appointment, status: Appointment['status']) {
   return invokeTechnicianWork<{ ok: true }>({ action: 'update_status', appointment_id: appointment.id, status })
+}
+
+export async function saveTechnicianFieldRecord(action: string, input: Record<string, unknown>) {
+  return invokeTechnicianWork<{ ok: true; id?: string }>({ action, ...input })
+}
+
+export async function uploadTechnicianEvidence(input: { companyId: string; appointmentId: string; file: File; observation?: string; recommendation?: string; riskLevel?: 'low' | 'medium' | 'high' }) {
+  const safeName = input.file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100)
+  const path = `${input.companyId}/${input.appointmentId}/${crypto.randomUUID()}-${safeName}`
+  const storage = client().storage.from('fd-sst-evidence')
+  const { error: uploadError } = await storage.upload(path, input.file, { contentType: input.file.type || undefined, upsert: false })
+  if (uploadError) throw uploadError
+  try {
+    await saveTechnicianFieldRecord('save_evidence', {
+      appointment_id: input.appointmentId,
+      storage_path: path,
+      file_name: input.file.name,
+      content_type: input.file.type || null,
+      byte_size: input.file.size,
+      media_kind: input.file.type.startsWith('video/') ? 'video' : input.file.type.startsWith('image/') ? 'image' : 'document',
+      observation: input.observation,
+      recommendation: input.recommendation,
+      risk_level: input.riskLevel,
+    })
+  } catch (error) {
+    await storage.remove([path])
+    throw error
+  }
+}
+
+export async function uploadTechnicianSignature(input: { companyId: string; appointmentId: string; blob: Blob; signerName: string; signerJobTitle?: string }) {
+  const path = `${input.companyId}/${input.appointmentId}/signature-${crypto.randomUUID()}.png`
+  const { error: uploadError } = await client().storage.from('fd-sst-evidence').upload(path, input.blob, { contentType: 'image/png', upsert: false })
+  if (uploadError) throw uploadError
+  try {
+    await saveTechnicianFieldRecord('save_signature', { appointment_id: input.appointmentId, storage_path: path, signer_name: input.signerName, signer_job_title: input.signerJobTitle })
+  } catch (error) {
+    await client().storage.from('fd-sst-evidence').remove([path])
+    throw error
+  }
 }
