@@ -131,7 +131,7 @@ export async function saveTechnicianFieldRecord(action: string, input: Record<st
   return invokeTechnicianWork<{ ok: true; id?: string }>({ action, ...input })
 }
 
-export async function uploadTechnicianEvidence(input: { companyId: string; appointmentId: string; file: File; observation?: string; recommendation?: string; additionalNotes?: string; checklistAnswerId?: string; riskLevel?: 'low' | 'medium' | 'high' }) {
+export async function uploadTechnicianEvidence(input: { companyId: string; appointmentId: string; file: File; observation?: string; locationText?: string; recommendation?: string; additionalNotes?: string; checklistAnswerId?: string; riskLevel?: 'low' | 'medium' | 'high' }) {
   const safeName = input.file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100)
   const path = `${input.companyId}/${input.appointmentId}/${crypto.randomUUID()}-${safeName}`
   const storage = client().storage.from('fd-sst-evidence')
@@ -146,6 +146,7 @@ export async function uploadTechnicianEvidence(input: { companyId: string; appoi
       byte_size: input.file.size,
       media_kind: input.file.type.startsWith('video/') ? 'video' : input.file.type.startsWith('image/') ? 'image' : 'document',
       observation: input.observation,
+      location_text: input.locationText,
       recommendation: input.recommendation,
       additional_notes: input.additionalNotes,
       checklist_answer_id: input.checklistAnswerId,
