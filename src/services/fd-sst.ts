@@ -24,7 +24,7 @@ export async function saveClient(input: Partial<Client> & Pick<Client, 'company_
 }
 
 export async function listAppointments(companyId: string, technicianId?: string) {
-  let query = client().from('appointments').select('*, clients(id, name, phone, whatsapp, address_line), appointment_technicians!inner(technician_id)').eq('company_id', companyId).order('starts_at')
+  let query = client().from('appointments').select('*, clients(id, name, phone, whatsapp, address_line), appointment_technicians!inner(technician_id, profiles(full_name))').eq('company_id', companyId).order('starts_at')
   if (technicianId) query = query.eq('appointment_technicians.technician_id', technicianId)
   const { data, error } = await query
   if (error) throw error
@@ -108,7 +108,7 @@ export async function saveTechnicianFieldRecord(action: string, input: Record<st
   return invokeTechnicianWork<{ ok: true; id?: string }>({ action, ...input })
 }
 
-export async function uploadTechnicianEvidence(input: { companyId: string; appointmentId: string; file: File; observation?: string; recommendation?: string; riskLevel?: 'low' | 'medium' | 'high' }) {
+export async function uploadTechnicianEvidence(input: { companyId: string; appointmentId: string; file: File; observation?: string; recommendation?: string; additionalNotes?: string; checklistAnswerId?: string; riskLevel?: 'low' | 'medium' | 'high' }) {
   const safeName = input.file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100)
   const path = `${input.companyId}/${input.appointmentId}/${crypto.randomUUID()}-${safeName}`
   const storage = client().storage.from('fd-sst-evidence')
@@ -124,6 +124,8 @@ export async function uploadTechnicianEvidence(input: { companyId: string; appoi
       media_kind: input.file.type.startsWith('video/') ? 'video' : input.file.type.startsWith('image/') ? 'image' : 'document',
       observation: input.observation,
       recommendation: input.recommendation,
+      additional_notes: input.additionalNotes,
+      checklist_answer_id: input.checklistAnswerId,
       risk_level: input.riskLevel,
     })
   } catch (error) {
@@ -142,4 +144,40 @@ export async function uploadTechnicianSignature(input: { companyId: string; appo
     await client().storage.from('fd-sst-evidence').remove([path])
     throw error
   }
+}
+
+export async function listAttendanceContent(appointmentId: string) {
+  const db = client()
+  const [services, activities, notes, evidence, signature, checklists] = await Promise.all([
+    db.from('service_records').select('*').eq('appointment_id', appointmentId).order('performed_at'),
+    db.from('function_activities').select('*').eq('appointment_id', appointmentId).order('created_at'),
+    db.from('appointment_notes').select('*').eq('appointment_id', appointmentId).order('created_at'),
+    db.from('evidence').select('*').eq('appointment_id', appointmentId).order('created_at'),
+    db.from('appointment_signatures').select('*').eq('appointment_id', appointmentId).maybeSingle(),
+    db.from('appointment_checklists').select('*, checklist_template_versions(id, checklist_templates(id, name, service_type), checklist_items(*))').eq('appointment_id', appointmentId).order('started_at'),
+  ])
+  for (const result of [services, activities, notes, evidence, signature, checklists]) if (result.error) throw result.error
+  const checklistIds = (checklists.data ?? []).map((item: any) => item.id)
+  const answers = checklistIds.length ? await db.from('checklist_answers').select('*').in('appointment_checklist_id', checklistIds) : { data: [], error: null }
+  if (answers.error) throw answers.error
+  return { services: services.data ?? [], activities: activities.data ?? [], notes: notes.data ?? [], evidence: evidence.data ?? [], signature: signature.data, checklists: checklists.data ?? [], answers: answers.data ?? [] }
+}
+
+export async function listChecklistTemplates(companyId: string) {
+  const { data, error } = await client().from('checklist_templates').select('*, checklist_template_versions(id, version_number, checklist_items(*))').eq('company_id', companyId).eq('active', true).is('archived_at', null).order('name')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function listCompanyServices(companyId: string) {
+  const { data, error } = await client().from('company_services').select('*').eq('company_id', companyId).eq('active', true).order('sort_order').order('name')
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getPrivateObjectUrl(path?: string | null) {
+  if (!path) return null
+  const { data, error } = await client().storage.from('fd-sst-evidence').createSignedUrl(path, 60 * 15)
+  if (error) throw error
+  return data.signedUrl
 }

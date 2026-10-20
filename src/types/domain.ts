@@ -53,4 +53,5 @@ export interface Appointment {
   started_at: string | null
   completed_at: string | null
   clients?: Pick<Client, 'id' | 'name' | 'phone' | 'whatsapp' | 'address_line'> | null
+  appointment_technicians?: Array<{ technician_id: string; profiles?: { full_name: string | null } | null }>
 }
