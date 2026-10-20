@@ -54,12 +54,110 @@ Deno.serve(async (request) => {
   const audit = async (companyId: string, entity: string, id: string | null, action: string, metadata: Record<string, unknown> = {}) => {
     await admin.from('audit_logs').insert({ company_id: companyId, actor_id: user.id, action, entity_type: entity, entity_id: id, metadata })
   }
+  /**
+   * Copies the maintained CNAE inspection routes into the tenant's own
+   * checklist version, then attaches that immutable version to this visit.
+   * Existing visits keep their original snapshot when the catalogue evolves.
+   */
+  const provisionCnaeChecklists = async (appointment: { id: string; company_id: string; client_id: string }) => {
+    const { data: attendedClient, error: clientError } = await admin
+      .from('clients')
+      .select('cnae_code, cnae_input, cnae_description_snapshot, business_activity')
+      .eq('id', appointment.client_id)
+      .eq('company_id', appointment.company_id)
+      .maybeSingle()
+    if (clientError) throw new Error(clientError.message)
+    const cnae = str(attendedClient?.cnae_code || attendedClient?.cnae_input).replace(/\D/g, '')
+    if (!cnae) throw new Error('Este cliente não possui CNAE cadastrado. Complete o cadastro antes de iniciar a visita.')
+
+    const { data: profiles, error: profilesError } = await admin
+      .from('cnae_checklist_profiles')
+      .select('id, cnae_prefix, title, description, technical_notice, revision')
+      .eq('active', true)
+      .order('cnae_prefix')
+    if (profilesError) throw new Error(profilesError.message)
+    const applicable = (profiles || []).filter((profile) => !profile.cnae_prefix || cnae.startsWith(profile.cnae_prefix))
+    if (!applicable.length) throw new Error('Não existe roteiro técnico disponível para o CNAE deste cliente.')
+
+    const attached: Array<{ title: string; item_count: number }> = []
+    for (const profile of applicable) {
+      const { data: cached, error: cacheError } = await admin
+        .from('company_cnae_checklist_cache')
+        .select('template_version_id')
+        .eq('company_id', appointment.company_id)
+        .eq('profile_id', profile.id)
+        .eq('profile_revision', profile.revision)
+        .maybeSingle()
+      if (cacheError) throw new Error(cacheError.message)
+      let templateVersionId = cached?.template_version_id as string | undefined
+      let itemCount = 0
+
+      if (!templateVersionId) {
+        const { data: profileItems, error: itemsError } = await admin
+          .from('cnae_checklist_profile_items')
+          .select('regulatory_standard_code, section_title, prompt, guidance, required, sort_order')
+          .eq('profile_id', profile.id)
+          .order('sort_order')
+        if (itemsError) throw new Error(itemsError.message)
+        if (!profileItems?.length) throw new Error(`O roteiro ${profile.title} não possui itens configurados.`)
+        itemCount = profileItems.length
+        const { data: template, error: templateError } = await admin.from('checklist_templates').insert({
+          company_id: appointment.company_id,
+          name: `Roteiro CNAE · ${profile.title}`,
+          active: true,
+          cnae_profile_id: profile.id,
+          source_label: `CNAE ${cnae}`,
+          created_by: user.id,
+        }).select('id').single()
+        if (templateError || !template) throw new Error(templateError?.message || 'Não foi possível criar o roteiro CNAE.')
+        const { data: version, error: versionError } = await admin.from('checklist_template_versions').insert({
+          company_id: appointment.company_id,
+          template_id: template.id,
+          version_number: profile.revision,
+          created_by: user.id,
+        }).select('id').single()
+        if (versionError || !version) throw new Error(versionError?.message || 'Não foi possível versionar o roteiro CNAE.')
+        const { error: itemInsertError } = await admin.from('checklist_items').insert(profileItems.map((item) => ({
+          company_id: appointment.company_id,
+          template_version_id: version.id,
+          section_title: [item.regulatory_standard_code, item.section_title].filter(Boolean).join(' · '),
+          prompt: item.prompt,
+          guidance: item.guidance,
+          response_kind: 'option',
+          options: ['conforming', 'non_conforming', 'not_applicable'],
+          required: item.required,
+          sort_order: item.sort_order,
+        })))
+        if (itemInsertError) throw new Error(itemInsertError.message)
+        const { error: createCacheError } = await admin.from('company_cnae_checklist_cache').insert({
+          company_id: appointment.company_id,
+          profile_id: profile.id,
+          profile_revision: profile.revision,
+          template_id: template.id,
+          template_version_id: version.id,
+        })
+        if (createCacheError) throw new Error(createCacheError.message)
+        templateVersionId = version.id
+      }
+
+      const { error: attachError } = await admin.from('appointment_checklists').upsert({
+        company_id: appointment.company_id,
+        appointment_id: appointment.id,
+        template_version_id: templateVersionId,
+      }, { onConflict: 'appointment_id,template_version_id', ignoreDuplicates: true })
+      if (attachError) throw new Error(attachError.message)
+      attached.push({ title: profile.title, item_count: itemCount })
+    }
+    return { cnae, activity: attendedClient?.cnae_description_snapshot || attendedClient?.business_activity || null, profiles: attached }
+  }
 
   if (body.action === 'create_client') {
     const companyId = str(body.company_id)
     if (!companyId || !(await activeTech(companyId))) return fail('Forbidden', 403)
     if (!str(body.name)) return fail('Informe o nome do cliente.')
-    const { data, error } = await admin.from('clients').insert({ company_id: companyId, name: str(body.name), legal_name: nullable(body.legal_name), cnpj: nullable(body.cnpj)?.replace(/\D/g, '') || null, phone: nullable(body.phone), whatsapp: nullable(body.whatsapp), email: nullable(body.email), address_line: nullable(body.address_line), city: nullable(body.city), state: nullable(body.state)?.toUpperCase() || null, cnae_input: nullable(body.cnae_input)?.replace(/\D/g, '') || null, business_activity: nullable(body.business_activity), created_by: user.id }).select().single()
+    const cnaeInput = str(body.cnae_input).replace(/\D/g, '')
+    if (!cnaeInput) return fail('Informe o CNAE principal do cliente.')
+    const { data, error } = await admin.from('clients').insert({ company_id: companyId, name: str(body.name), legal_name: nullable(body.legal_name), cnpj: nullable(body.cnpj)?.replace(/\D/g, '') || null, phone: nullable(body.phone), whatsapp: nullable(body.whatsapp), email: nullable(body.email), address_line: nullable(body.address_line), city: nullable(body.city), state: nullable(body.state)?.toUpperCase() || null, cnae_input: cnaeInput, business_activity: nullable(body.business_activity), created_by: user.id }).select().single()
     if (error) return fail(error.message)
     await audit(companyId, 'client', data.id, 'technician_created_client')
     return json({ client: data })
@@ -82,14 +180,20 @@ Deno.serve(async (request) => {
   if (body.action === 'start_appointment') {
     const appointment = await appointmentFor(str(body.appointment_id))
     if (!appointment) return fail('Atendimento não disponível.', 404)
-    if (appointment.status === 'in_progress') return json({ ok: true, already_started: true })
+    if (appointment.status === 'in_progress') {
+      try { return json({ ok: true, already_started: true, cnae_checklists: await provisionCnaeChecklists(appointment) }) }
+      catch (error) { return fail(error instanceof Error ? error.message : 'Não foi possível preparar o checklist por CNAE.') }
+    }
     if (!['scheduled', 'pending_confirmation', 'confirmed'].includes(appointment.status)) return fail('Este atendimento não pode ser iniciado.', 409)
+    let checklistProvision
+    try { checklistProvision = await provisionCnaeChecklists(appointment) }
+    catch (error) { return fail(error instanceof Error ? error.message : 'Não foi possível preparar o checklist por CNAE.') }
     const now = new Date().toISOString()
     const { error } = await admin.from('appointments').update({ status: 'in_progress', started_at: now }).eq('id', appointment.id).eq('status', appointment.status)
     if (error) return fail(error.message, 500)
     await admin.from('appointment_status_history').insert({ company_id: appointment.company_id, appointment_id: appointment.id, from_status: appointment.status, to_status: 'in_progress', changed_by: user.id })
-    await audit(appointment.company_id, 'appointment', appointment.id, 'attendance_started')
-    return json({ ok: true })
+    await audit(appointment.company_id, 'appointment', appointment.id, 'attendance_started', { cnae: checklistProvision.cnae, cnae_profiles: checklistProvision.profiles.map((item) => item.title) })
+    return json({ ok: true, cnae_checklists: checklistProvision })
   }
 
   if (body.action === 'save_service' || body.action === 'save_function_activity' || body.action === 'save_note' || body.action === 'save_evidence' || body.action === 'update_evidence' || body.action === 'save_signature' || body.action === 'attach_checklist' || body.action === 'save_checklist_answer' || body.action === 'delete_content') {

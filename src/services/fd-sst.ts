@@ -38,7 +38,7 @@ export async function listAppointments(companyId: string, technicianId?: string)
     if (!appointmentIds.length) return [] as Appointment[]
     const { data, error } = await db
       .from('appointments')
-      .select('*, clients(id, name, phone, whatsapp, address_line)')
+      .select('*, clients(id, name, phone, whatsapp, address_line, cnae_code, cnae_input, business_activity, cnae_description_snapshot, risk_grade)')
       .eq('company_id', companyId)
       .in('id', appointmentIds)
       .order('starts_at')
@@ -47,7 +47,7 @@ export async function listAppointments(companyId: string, technicianId?: string)
   }
   const { data, error } = await db
     .from('appointments')
-    .select('*, clients(id, name, phone, whatsapp, address_line)')
+    .select('*, clients(id, name, phone, whatsapp, address_line, cnae_code, cnae_input, business_activity, cnae_description_snapshot, risk_grade)')
     .eq('company_id', companyId)
     .order('starts_at')
   if (error) throw error
@@ -177,7 +177,7 @@ export async function listAttendanceContent(appointmentId: string) {
     db.from('appointment_notes').select('*').eq('appointment_id', appointmentId).order('created_at'),
     db.from('evidence').select('*').eq('appointment_id', appointmentId).order('created_at'),
     db.from('appointment_signatures').select('*').eq('appointment_id', appointmentId).maybeSingle(),
-    db.from('appointment_checklists').select('*, checklist_template_versions(id, checklist_templates(id, name, service_type), checklist_items(*))').eq('appointment_id', appointmentId).order('started_at'),
+    db.from('appointment_checklists').select('*, checklist_template_versions(id, checklist_templates(id, name, service_type, cnae_profile_id, source_label), checklist_items(*))').eq('appointment_id', appointmentId).order('started_at'),
   ])
   for (const result of [services, activities, notes, evidence, signature, checklists]) if (result.error) throw result.error
   const checklistIds = (checklists.data ?? []).map((item: any) => item.id)

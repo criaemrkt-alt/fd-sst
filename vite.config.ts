@@ -7,11 +7,11 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // Mantém os caminhos dos arquivos estáveis entre publicações. Isso evita tela branca
-        // quando o navegador ainda possui o index.html da publicação anterior em cache.
-        entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/[name][extname]',
+        // Cada publicação recebe nomes de arquivos novos. Assim o celular não
+        // continua usando um bundle antigo depois que o Pages é atualizado.
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'data-vendor': ['@supabase/supabase-js', '@tanstack/react-query'],

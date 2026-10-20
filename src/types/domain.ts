@@ -52,6 +52,6 @@ export interface Appointment {
   client_confirmed_at: string | null
   started_at: string | null
   completed_at: string | null
-  clients?: Pick<Client, 'id' | 'name' | 'phone' | 'whatsapp' | 'address_line'> | null
+  clients?: Pick<Client, 'id' | 'name' | 'phone' | 'whatsapp' | 'address_line' | 'cnae_code' | 'cnae_input' | 'business_activity' | 'cnae_description_snapshot' | 'risk_grade'> | null
   appointment_technicians?: Array<{ technician_id: string; profiles?: { full_name: string | null } | null }>
 }
