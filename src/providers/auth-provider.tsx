@@ -12,6 +12,7 @@ type AuthState = {
   identityError: string | null
   configured: boolean
   refreshIdentity: () => Promise<void>
+  signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined)
@@ -67,9 +68,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => listener.subscription.unsubscribe()
   }, [])
 
+  const signOut = async () => {
+    if (!supabase) return
+    const { error } = await supabase.auth.signOut({ scope: 'local' })
+    if (error) throw error
+  }
+
   const value = useMemo<AuthState>(() => ({
     session, user: session?.user ?? null, profile, memberships, loading, identityError,
-    configured: hasSupabaseConfiguration, refreshIdentity,
+    configured: hasSupabaseConfiguration, refreshIdentity, signOut,
   }), [session, profile, memberships, loading, identityError])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
