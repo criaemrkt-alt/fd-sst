@@ -1,8 +1,9 @@
-const CACHE = 'fd-sst-shell-v1'
-const SHELL = ['/', '/manifest.webmanifest', '/fd-sst-icon.svg']
-self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL))))
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
+self.addEventListener('install', (event) => event.waitUntil(self.skipWaiting()))
+self.addEventListener('activate', (event) => event.waitUntil(Promise.all([
+  self.clients.claim(),
+  caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('fd-sst-')).map((key) => caches.delete(key)))),
+])))
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return
-  event.respondWith(fetch(event.request).catch(() => caches.match(event.request)))
+  event.respondWith(fetch(event.request))
 })
