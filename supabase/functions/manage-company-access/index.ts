@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders } from '../_shared/cors.ts'
 
 type RequestBody = {
-  action?: 'list_company_accounts' | 'create_admin' | 'create_technician' | 'update_technician' | 'reset_password' | 'set_company_status' | 'set_member_status'
+  action?: 'list_company_accounts' | 'create_admin' | 'create_technician' | 'update_technician' | 'update_company_account' | 'reset_password' | 'set_company_status' | 'set_member_status'
   company_id?: string
   user_id?: string
   full_name?: string
@@ -156,6 +156,23 @@ Deno.serve(async (request) => {
       phone: body.phone?.trim() || null,
     }).eq('company_id', body.company_id).eq('user_id', body.user_id)
     if (membershipError) return message(membershipError.message, 500)
+    return json({ ok: true })
+  }
+
+  if (body.action === 'update_company_account') {
+    if (!isMaster) return message('Somente o Master pode editar acessos de outras pessoas.', 403)
+    if (!body.company_id || !body.user_id) return message('Empresa e usuário são obrigatórios.', 400)
+    const membership = await getMembership(body.company_id, body.user_id)
+    if (!membership) return message('Usuário não pertence a esta empresa.', 404)
+    const email = body.email?.trim().toLowerCase()
+    if (!email || !email.includes('@')) return message('Informe um e-mail de login válido.', 400)
+    if (body.password && body.password.length < 8) return message('A nova senha precisa ter ao menos 8 caracteres.', 400)
+    const authUpdate: { email: string; email_confirm: boolean; password?: string } = { email, email_confirm: true }
+    if (body.password) authUpdate.password = body.password
+    const { error: authError } = await admin.auth.admin.updateUserById(body.user_id, authUpdate)
+    if (authError) return message(authError.message, 400)
+    const { error: profileError } = await admin.from('profiles').update({ full_name: body.full_name?.trim() || null }).eq('id', body.user_id)
+    if (profileError) return message(profileError.message, 500)
     return json({ ok: true })
   }
 
