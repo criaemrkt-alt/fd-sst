@@ -24,7 +24,10 @@ export async function saveClient(input: Partial<Client> & Pick<Client, 'company_
 }
 
 export async function listAppointments(companyId: string, technicianId?: string) {
-  let query = client().from('appointments').select('*, clients(id, name, phone, whatsapp, address_line), appointment_technicians!inner(technician_id, profiles(full_name))').eq('company_id', companyId).order('starts_at')
+  // `profiles` has no direct PostgREST relationship with appointment_technicians.
+  // Keep this agenda query on the explicit assignment relation so one nested
+  // display field can never block all appointments from loading.
+  let query = client().from('appointments').select('*, clients(id, name, phone, whatsapp, address_line), appointment_technicians!inner(technician_id)').eq('company_id', companyId).order('starts_at')
   if (technicianId) query = query.eq('appointment_technicians.technician_id', technicianId)
   const { data, error } = await query
   if (error) throw error
