@@ -8,6 +8,7 @@ import { supabase } from './lib/supabase'
 import { createAppointment, listAppointments, listClients, saveClient, updateAppointmentStatus } from './services/fd-sst'
 import { Button, EmptyState, LoadingState, Modal, Notice } from './components/ui'
 import { MasterAccessPage } from './components/master-access'
+import { TechnicianManagementPage } from './components/technician-management'
 import type { Appointment, Client, Membership } from './types/domain'
 
 export function App() {
@@ -81,7 +82,7 @@ function CompanyArea({ memberships }: { memberships: Membership[] }) {
 }
 
 function AdminArea({ membership, memberships, onCompanyChange }: { membership: Membership; memberships: Membership[]; onCompanyChange: (id: string) => void }) {
-  return <main className="admin-layout"><aside className="sidebar"><Brand /><CompanySelect memberships={memberships} value={membership.company_id} onChange={onCompanyChange} /><nav><NavItem to="/app/admin" end icon={<Home />} label="Dashboard" /><NavItem to="/app/admin/appointments" icon={<CalendarDays />} label="Atendimentos" /><NavItem to="/app/admin/clients" icon={<Factory />} label="Clientes" /><NavItem to="/app/admin/technicians" icon={<Users />} label="Técnicos" /><NavItem to="/app/admin/templates" icon={<CheckSquare />} label="Modelos" /><NavItem to="/app/admin/company" icon={<Wrench />} label="Empresa" /></nav><SignOut /></aside><section className="admin-content"><Routes><Route path="/app/admin" element={<AdminDashboard companyId={membership.company_id} />} /><Route path="/app/admin/appointments" element={<AppointmentsPage companyId={membership.company_id} />} /><Route path="/app/admin/clients" element={<ClientsPage companyId={membership.company_id} />} /><Route path="*" element={<PendingModule />} /></Routes></section></main>
+  return <main className="admin-layout"><aside className="sidebar"><Brand /><CompanySelect memberships={memberships} value={membership.company_id} onChange={onCompanyChange} /><nav><NavItem to="/app/admin" end icon={<Home />} label="Dashboard" /><NavItem to="/app/admin/appointments" icon={<CalendarDays />} label="Atendimentos" /><NavItem to="/app/admin/clients" icon={<Factory />} label="Clientes" /><NavItem to="/app/admin/technicians" icon={<Users />} label="Técnicos" /><NavItem to="/app/admin/templates" icon={<CheckSquare />} label="Modelos" /><NavItem to="/app/admin/company" icon={<Wrench />} label="Empresa" /></nav><SignOut /></aside><section className="admin-content"><Routes><Route path="/app/admin" element={<AdminDashboard companyId={membership.company_id} />} /><Route path="/app/admin/appointments" element={<AppointmentsPage companyId={membership.company_id} />} /><Route path="/app/admin/clients" element={<ClientsPage companyId={membership.company_id} />} /><Route path="/app/admin/technicians" element={<TechnicianManagementPage companyId={membership.company_id} />} /><Route path="*" element={<PendingModule />} /></Routes></section></main>
 }
 
 function TechnicianArea({ membership, memberships, onCompanyChange }: { membership: Membership; memberships: Membership[]; onCompanyChange: (id: string) => void }) {
