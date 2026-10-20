@@ -24,12 +24,32 @@ export async function saveClient(input: Partial<Client> & Pick<Client, 'company_
 }
 
 export async function listAppointments(companyId: string, technicianId?: string) {
-  // `profiles` has no direct PostgREST relationship with appointment_technicians.
-  // Keep this agenda query on the explicit assignment relation so one nested
-  // display field can never block all appointments from loading.
-  let query = client().from('appointments').select('*, clients(id, name, phone, whatsapp, address_line), appointment_technicians!inner(technician_id)').eq('company_id', companyId).order('starts_at')
-  if (technicianId) query = query.eq('appointment_technicians.technician_id', technicianId)
-  const { data, error } = await query
+  const db = client()
+  // Load assignments separately. This avoids a fragile embedded PostgREST
+  // relation from turning an agenda into a full query failure on mobile.
+  if (technicianId) {
+    const { data: assignments, error: assignmentError } = await db
+      .from('appointment_technicians')
+      .select('appointment_id')
+      .eq('company_id', companyId)
+      .eq('technician_id', technicianId)
+    if (assignmentError) throw assignmentError
+    const appointmentIds = (assignments ?? []).map((item) => item.appointment_id)
+    if (!appointmentIds.length) return [] as Appointment[]
+    const { data, error } = await db
+      .from('appointments')
+      .select('*, clients(id, name, phone, whatsapp, address_line)')
+      .eq('company_id', companyId)
+      .in('id', appointmentIds)
+      .order('starts_at')
+    if (error) throw error
+    return data as Appointment[]
+  }
+  const { data, error } = await db
+    .from('appointments')
+    .select('*, clients(id, name, phone, whatsapp, address_line)')
+    .eq('company_id', companyId)
+    .order('starts_at')
   if (error) throw error
   return data as Appointment[]
 }
