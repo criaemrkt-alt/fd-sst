@@ -38,8 +38,8 @@ async function dataUriFromUrl(url: string) {
 }
 
 function addHeader(slide: PptxGenJS.Slide, title: string, subtitle?: string) {
-  slide.addShape(PptxGenJS.ShapeType.rect, { x: 0, y: 0, w: SLIDE_W, h: 0.68, fill: { color: COLORS.ink }, line: { color: COLORS.ink } })
-  slide.addShape(PptxGenJS.ShapeType.rect, { x: 0, y: 0.68, w: SLIDE_W, h: 0.08, fill: { color: COLORS.yellow }, line: { color: COLORS.yellow } })
+  slide.addShape('rect', { x: 0, y: 0, w: SLIDE_W, h: 0.68, fill: { color: COLORS.ink }, line: { color: COLORS.ink } })
+  slide.addShape('rect', { x: 0, y: 0.68, w: SLIDE_W, h: 0.08, fill: { color: COLORS.yellow }, line: { color: COLORS.yellow } })
   slide.addText(title, { x: 0.55, y: 0.18, w: 8.8, h: 0.28, fontFace: 'Aptos Display', fontSize: 23, bold: true, color: COLORS.white, margin: 0 })
   if (subtitle) slide.addText(subtitle, { x: 9.15, y: 0.22, w: 3.55, h: 0.2, fontFace: 'Aptos', fontSize: 9, color: 'D8DDE0', align: 'right', margin: 0 })
   slide.addText('FD SST · relatório digital', { x: 0.55, y: 7.14, w: 4.2, h: 0.14, fontFace: 'Aptos', fontSize: 7.5, color: COLORS.muted, margin: 0 })
@@ -51,7 +51,7 @@ function addSectionTitle(slide: PptxGenJS.Slide, title: string, description?: st
 }
 
 function addCard(slide: PptxGenJS.Slide, label: string, value: string, x: number, y: number, w: number, h: number) {
-  slide.addShape(PptxGenJS.ShapeType.roundRect, { x, y, w, h, rectRadius: 0.08, fill: { color: COLORS.pale }, line: { color: COLORS.line, width: 0.8 } })
+  slide.addShape('roundRect', { x, y, w, h, rectRadius: 0.08, fill: { color: COLORS.pale }, line: { color: COLORS.line, width: 0.8 } })
   slide.addText(label.toUpperCase(), { x: x + 0.18, y: y + 0.14, w: w - 0.36, h: 0.16, fontFace: 'Aptos', fontSize: 7.6, bold: true, color: COLORS.muted, charSpacing: 0.4, margin: 0 })
   slide.addText(value, { x: x + 0.18, y: y + 0.4, w: w - 0.36, h: h - 0.54, fontFace: 'Aptos', fontSize: 12, bold: true, color: COLORS.ink, breakLine: false, fit: 'shrink', margin: 0.02, valign: 'middle' })
 }
@@ -61,7 +61,7 @@ function addLines(slide: PptxGenJS.Slide, lines: string[], y = 1.86) {
   const rowHeight = Math.min(0.72, 4.9 / visible.length)
   visible.forEach((line, index) => {
     const top = y + index * rowHeight
-    slide.addShape(PptxGenJS.ShapeType.roundRect, { x: 0.66, y: top, w: 12, h: Math.max(0.45, rowHeight - 0.11), rectRadius: 0.05, fill: { color: index % 2 ? COLORS.white : COLORS.pale }, line: { color: COLORS.line, transparency: 70, width: 0.5 } })
+    slide.addShape('roundRect', { x: 0.66, y: top, w: 12, h: Math.max(0.45, rowHeight - 0.11), rectRadius: 0.05, fill: { color: index % 2 ? COLORS.white : COLORS.pale }, line: { color: COLORS.line, transparency: 70, width: 0.5 } })
     slide.addText(line, { x: 0.88, y: top + 0.1, w: 11.55, h: Math.max(0.25, rowHeight - 0.2), fontFace: 'Aptos', fontSize: visible.length > 7 ? 9.2 : 10.5, color: COLORS.ink, breakLine: false, fit: 'shrink', margin: 0 })
   })
 }
@@ -92,11 +92,11 @@ export async function generateAttendancePowerPoint({ appointment, content }: { a
 
   const cover = pptx.addSlide()
   cover.background = { color: COLORS.ink }
-  cover.addShape(PptxGenJS.ShapeType.rect, { x: 0, y: 0, w: SLIDE_W, h: 0.16, fill: { color: COLORS.yellow }, line: { color: COLORS.yellow } })
+  cover.addShape('rect', { x: 0, y: 0, w: SLIDE_W, h: 0.16, fill: { color: COLORS.yellow }, line: { color: COLORS.yellow } })
   cover.addText('RELATÓRIO COMPLETO', { x: 0.76, y: 1.05, w: 4.5, h: 0.22, fontFace: 'Aptos', fontSize: 11, bold: true, color: COLORS.yellow, charSpacing: 1.2, margin: 0 })
   cover.addText('Atendimento\ntécnico', { x: 0.72, y: 1.48, w: 7.3, h: 1.38, fontFace: 'Aptos Display', fontSize: 39, bold: true, color: COLORS.white, breakLine: false, margin: 0 })
   cover.addText(clientName, { x: 0.76, y: 3.25, w: 8.6, h: 0.38, fontFace: 'Aptos', fontSize: 18, color: 'DDE1E4', margin: 0 })
-  cover.addShape(PptxGenJS.ShapeType.roundRect, { x: 0.76, y: 4.2, w: 5.1, h: 1.15, rectRadius: 0.08, fill: { color: '252A2E' }, line: { color: '394147', width: 0.7 } })
+  cover.addShape('roundRect', { x: 0.76, y: 4.2, w: 5.1, h: 1.15, rectRadius: 0.08, fill: { color: '252A2E' }, line: { color: '394147', width: 0.7 } })
   cover.addText(`${text(appointment.service_type)}\n${date(appointment.completed_at || appointment.starts_at)}`, { x: 1.02, y: 4.48, w: 4.58, h: 0.52, fontFace: 'Aptos', fontSize: 12.5, bold: true, color: COLORS.white, breakLine: false, margin: 0 })
   cover.addText('Gerado a partir do atendimento concluído no sistema', { x: 0.76, y: 6.72, w: 7.1, h: 0.18, fontFace: 'Aptos', fontSize: 9, color: 'AEB7BD', margin: 0 })
 
@@ -167,7 +167,7 @@ export async function generateAttendancePowerPoint({ appointment, content }: { a
     const slide = pptx.addSlide()
     addHeader(slide, `Inspeção ${String(index + 1).padStart(2, '0')}`, clientName)
     addSectionTitle(slide, 'Foto e observação da inspeção', `Registro ${index + 1} de ${content.evidence.length}`)
-    slide.addShape(PptxGenJS.ShapeType.roundRect, { x: 0.66, y: 1.86, w: 7.2, h: 4.82, rectRadius: 0.08, fill: { color: COLORS.pale }, line: { color: COLORS.line, width: 0.8 } })
+    slide.addShape('roundRect', { x: 0.66, y: 1.86, w: 7.2, h: 4.82, rectRadius: 0.08, fill: { color: COLORS.pale }, line: { color: COLORS.line, width: 0.8 } })
     let imageData: string | null = null
     if (record.media_kind === 'image' && record.storage_path) {
       try {
@@ -182,7 +182,7 @@ export async function generateAttendancePowerPoint({ appointment, content }: { a
     } else {
       slide.addText(record.media_kind === 'image' ? 'Foto não disponível para exportação' : `Arquivo registrado: ${text(record.file_name)}`, { x: 1.05, y: 3.95, w: 6.4, h: 0.3, fontFace: 'Aptos', fontSize: 13, italic: true, color: COLORS.muted, align: 'center', margin: 0 })
     }
-    slide.addShape(PptxGenJS.ShapeType.roundRect, { x: 8.18, y: 1.86, w: 4.5, h: 4.82, rectRadius: 0.08, fill: { color: COLORS.white }, line: { color: COLORS.line, width: 0.8 } })
+    slide.addShape('roundRect', { x: 8.18, y: 1.86, w: 4.5, h: 4.82, rectRadius: 0.08, fill: { color: COLORS.white }, line: { color: COLORS.line, width: 0.8 } })
     slide.addText('OBSERVAÇÃO', { x: 8.5, y: 2.16, w: 3.84, h: 0.16, fontFace: 'Aptos', fontSize: 8, bold: true, color: COLORS.muted, charSpacing: 0.6, margin: 0 })
     slide.addText(text(record.observation, 'Sem observação registrada.'), { x: 8.5, y: 2.5, w: 3.84, h: 1.95, fontFace: 'Aptos', fontSize: 16, bold: true, color: COLORS.ink, fit: 'shrink', breakLine: false, margin: 0 })
     let detailY = 4.75
@@ -205,7 +205,7 @@ export async function generateAttendancePowerPoint({ appointment, content }: { a
       const url = await getPrivateObjectUrl((content.signature as any).storage_path)
       if (url) {
         const signatureData = await dataUriFromUrl(url)
-        slide.addShape(PptxGenJS.ShapeType.roundRect, { x: 2.2, y: 3.55, w: 8.9, h: 2.15, rectRadius: 0.08, fill: { color: COLORS.white }, line: { color: COLORS.line, width: 0.8 } })
+        slide.addShape('roundRect', { x: 2.2, y: 3.55, w: 8.9, h: 2.15, rectRadius: 0.08, fill: { color: COLORS.white }, line: { color: COLORS.line, width: 0.8 } })
         slide.addImage({ data: signatureData, x: 2.55, y: 3.8, w: 8.2, h: 1.65, sizing: { type: 'contain', x: 2.55, y: 3.8, w: 8.2, h: 1.65 }, altText: 'Assinatura do responsável' })
       }
     } catch {
