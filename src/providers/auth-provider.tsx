@@ -38,7 +38,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
     const [profileResponse, membershipsResponse] = await Promise.all([
       supabase.from('profiles').select('id, full_name, global_role, active').eq('id', nextSession.user.id).single(),
-      supabase.from('company_memberships').select('id, company_id, user_id, role, active, job_title, companies(id, name)').eq('user_id', nextSession.user.id).eq('active', true),
+      supabase.from('company_memberships').select('id, company_id, user_id, role, active, job_title, companies!inner(id, name, status)').eq('user_id', nextSession.user.id).eq('active', true).eq('companies.status', 'active'),
     ])
     if (profileResponse.error) {
       setProfile(null)
