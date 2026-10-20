@@ -72,16 +72,22 @@ Deno.serve(async (request) => {
     if (!body.company_id || !(await canManageCompany(body.company_id))) return message('Forbidden', 403)
     const { data: memberships, error } = await admin
       .from('company_memberships')
-      .select('user_id, role, active, job_title, phone, profiles(full_name)')
+      .select('user_id, role, active, job_title, phone')
       .eq('company_id', body.company_id)
       .order('created_at')
     if (error) return message(error.message, 500)
+    const userIds = (memberships ?? []).map((item) => item.user_id)
+    const { data: profiles, error: profilesError } = userIds.length
+      ? await admin.from('profiles').select('id, full_name').in('id', userIds)
+      : { data: [], error: null }
+    if (profilesError) return message(profilesError.message, 500)
     const { data: authData, error: authError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
     if (authError) return message(authError.message, 500)
+    const names = new Map((profiles ?? []).map((item) => [item.id, item.full_name]))
     const emails = new Map(authData.users.map((item) => [item.id, item.email]))
     return json({ accounts: (memberships ?? []).map((item: any) => ({
       ...item,
-      full_name: Array.isArray(item.profiles) ? item.profiles[0]?.full_name : item.profiles?.full_name,
+      full_name: names.get(item.user_id) ?? null,
       email: emails.get(item.user_id) ?? null,
     })) })
   }
