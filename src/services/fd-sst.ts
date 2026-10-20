@@ -60,3 +60,41 @@ export async function createAppointment(input: {
   }
   return data as Appointment
 }
+
+type TechnicianAppointmentInput = {
+  company_id: string
+  client_id: string
+  service_type: string
+  starts_at: string
+  ends_at?: string
+  location_text?: string
+  description?: string
+}
+
+async function invokeTechnicianWork<T>(body: Record<string, unknown>) {
+  const { data, error } = await client().functions.invoke('manage-technician-work', { body })
+  if (error) throw new Error(error.message || 'Não foi possível concluir esta ação.')
+  return data as T
+}
+
+/** Creates an appointment already assigned to the signed-in technician. */
+export async function createTechnicianAppointment(input: TechnicianAppointmentInput) {
+  return invokeTechnicianWork<{ appointment: Appointment }>({ action: 'create_appointment', ...input })
+}
+
+export async function createTechnicianClient(input: Pick<Client, 'company_id' | 'name'> & Partial<Client>) {
+  return invokeTechnicianWork<{ client: Client }>({
+    action: 'create_client',
+    company_id: input.company_id,
+    name: input.name,
+    phone: input.phone,
+    whatsapp: input.whatsapp,
+    address_line: input.address_line,
+    city: input.city,
+    state: input.state,
+  })
+}
+
+export async function updateTechnicianAppointmentStatus(appointment: Appointment, status: Appointment['status']) {
+  return invokeTechnicianWork<{ ok: true }>({ action: 'update_status', appointment_id: appointment.id, status })
+}
