@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarDays, CheckCircle2, MapPin, MessageCircle, Phone, Plus, UserRound } from 'lucide-react'
+import { CalendarDays, CheckCircle2, LogOut, MapPin, MessageCircle, Phone, Plus, UserRound } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
@@ -60,8 +60,9 @@ export function TechnicianActivitiesPage({ membership }: { membership: Membershi
 }
 
 export function TechnicianMorePage({ membership }: { membership: Membership }) {
-  const { user, profile } = useAuth()
-  return <section className="tech-page"><header className="tech-title-row"><div><h1>Mais</h1><p>Seu acesso e atalhos de campo.</p></div></header><section className="card profile-card"><div className="profile-avatar">{(profile?.full_name || user?.email || 'T').slice(0, 1).toUpperCase()}</div><div><strong>{profile?.full_name || 'Técnico'}</strong><small>{membership.job_title || 'Profissional de SST'}</small><small>{user?.email}</small></div></section><section className="card"><div className="field-info"><span>Empresa</span><strong>{membership.companies?.name || 'Empresa vinculada'}</strong></div><div className="field-info"><span>Como usar</span><strong>Crie um atendimento na Agenda, inicie a visita e finalize ao concluir.</strong></div></section></section>
+  const { user, profile, signOut } = useAuth()
+  const signOutMutation = useMutation({ mutationFn: signOut })
+  return <section className="tech-page"><header className="tech-title-row"><div><h1>Mais</h1><p>Seu acesso e atalhos de campo.</p></div></header><section className="card profile-card"><div className="profile-avatar">{(profile?.full_name || user?.email || 'T').slice(0, 1).toUpperCase()}</div><div><strong>{profile?.full_name || 'Técnico'}</strong><small>{membership.job_title || 'Profissional de SST'}</small><small>{user?.email}</small></div></section><section className="card"><div className="field-info"><span>Empresa</span><strong>{membership.companies?.name || 'Empresa vinculada'}</strong></div><div className="field-info"><span>Como usar</span><strong>Crie um atendimento na Agenda, inicie a visita e finalize ao concluir.</strong></div></section><section className="card tech-account-actions"><h2>Conta</h2><p>Encerre sua sessão neste celular ao terminar o uso.</p>{signOutMutation.error && <Notice kind="error">Não foi possível sair agora. Tente novamente.</Notice>}<Button className="button-secondary" disabled={signOutMutation.isPending} onClick={() => signOutMutation.mutate()}><LogOut size={18} /> {signOutMutation.isPending ? 'Saindo...' : 'Sair da conta'}</Button></section></section>
 }
 
 export function TechnicianClientsPage({ companyId }: { companyId: string }) {
