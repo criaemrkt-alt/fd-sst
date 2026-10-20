@@ -103,7 +103,7 @@ Deno.serve(async (request) => {
         itemCount = profileItems.length
         const { data: template, error: templateError } = await admin.from('checklist_templates').insert({
           company_id: appointment.company_id,
-          name: `Roteiro CNAE · ${profile.title}`,
+          name: `Conferência CNAE · ${profile.title}`,
           active: true,
           cnae_profile_id: profile.id,
           source_label: `CNAE ${cnae}`,
@@ -125,7 +125,7 @@ Deno.serve(async (request) => {
           guidance: item.guidance,
           response_kind: 'option',
           options: ['conforming', 'non_conforming', 'not_applicable'],
-          required: item.required,
+          required: false,
           sort_order: item.sort_order,
         })))
         if (itemInsertError) throw new Error(itemInsertError.message)
@@ -209,7 +209,7 @@ Deno.serve(async (request) => {
       return json({ ok: true, id: result.data.id })
     }
     if (body.action === 'save_function_activity') {
-      if (!str(body.role_name) || !str(body.description)) return fail('Informe a função e a atividade.')
+      if (!str(body.role_name) && !str(body.description)) return fail('Informe ao menos a função ou a descrição da atividade.')
       const payload = { role_name: str(body.role_name), worker_name: nullable(body.worker_name), sector: nullable(body.sector), description: str(body.description), notes: nullable(body.notes), updated_at: new Date().toISOString(), updated_by: user.id }
       const id = str(body.id)
       const result = id ? await admin.from('function_activities').update(payload).eq('id', id).eq('appointment_id', appointment.id).select('id').single() : await admin.from('function_activities').insert({ ...payload, company_id: appointment.company_id, client_id: appointment.client_id, appointment_id: appointment.id, created_by: user.id }).select('id').single()
@@ -247,14 +247,14 @@ Deno.serve(async (request) => {
       const path = str(body.storage_path)
       if (!path.startsWith(`${appointment.company_id}/${appointment.id}/`) || !str(body.file_name)) return fail('Arquivo de evidência inválido.')
       const media = ['image', 'video', 'document'].includes(str(body.media_kind)) ? str(body.media_kind) : 'document'
-      const { data, error } = await admin.from('evidence').insert({ company_id: appointment.company_id, appointment_id: appointment.id, checklist_answer_id: nullable(body.checklist_answer_id), storage_bucket: 'fd-sst-evidence', storage_path: path, file_name: str(body.file_name), content_type: nullable(body.content_type), byte_size: finite(body.byte_size), media_kind: media, risk_level: validRisk(body.risk_level), observation: nullable(body.observation), recommendation: nullable(body.recommendation), additional_notes: nullable(body.additional_notes), created_by: user.id, updated_by: user.id }).select('id').single()
+      const { data, error } = await admin.from('evidence').insert({ company_id: appointment.company_id, appointment_id: appointment.id, checklist_answer_id: nullable(body.checklist_answer_id), storage_bucket: 'fd-sst-evidence', storage_path: path, file_name: str(body.file_name), content_type: nullable(body.content_type), byte_size: finite(body.byte_size), media_kind: media, risk_level: validRisk(body.risk_level), observation: nullable(body.observation), location_text: nullable(body.location_text), recommendation: nullable(body.recommendation), additional_notes: nullable(body.additional_notes), created_by: user.id, updated_by: user.id }).select('id').single()
       if (error) return fail(error.message)
       await audit(appointment.company_id, 'evidence', data.id, 'attendance_evidence_added')
       return json({ ok: true, id: data.id })
     }
     if (body.action === 'update_evidence') {
       const id = str(body.id); if (!id) return fail('Evidência não informada.')
-      const { data, error } = await admin.from('evidence').update({ risk_level: validRisk(body.risk_level), observation: nullable(body.observation), recommendation: nullable(body.recommendation), additional_notes: nullable(body.additional_notes), checklist_answer_id: nullable(body.checklist_answer_id), updated_at: new Date().toISOString(), updated_by: user.id }).eq('id', id).eq('appointment_id', appointment.id).select('id').single()
+      const { data, error } = await admin.from('evidence').update({ risk_level: validRisk(body.risk_level), observation: nullable(body.observation), location_text: nullable(body.location_text), recommendation: nullable(body.recommendation), additional_notes: nullable(body.additional_notes), checklist_answer_id: nullable(body.checklist_answer_id), updated_at: new Date().toISOString(), updated_by: user.id }).eq('id', id).eq('appointment_id', appointment.id).select('id').single()
       return error ? fail(error.message) : json({ ok: true, id: data.id })
     }
     if (body.action === 'save_signature') {
@@ -282,23 +282,6 @@ Deno.serve(async (request) => {
     if (!appointment) return fail('Atendimento não disponível.', 404)
     if (appointment.status === 'completed') return json({ ok: true, already_finalized: true })
     if (appointment.status !== 'in_progress') return fail('Inicie o atendimento antes de finalizar.', 409)
-    const { data: assignedChecklists, error: checklistError } = await admin.from('appointment_checklists').select('id, template_version_id').eq('appointment_id', appointment.id)
-    if (checklistError) return fail(checklistError.message, 500)
-    const missing: Array<{ prompt: string }> = []
-    for (const checklist of assignedChecklists || []) {
-      const { data: requiredItems, error: itemError } = await admin.from('checklist_items').select('id, prompt').eq('template_version_id', checklist.template_version_id).eq('required', true)
-      if (itemError) return fail(itemError.message, 500)
-      const { data: answers, error: answerError } = await admin.from('checklist_answers').select('checklist_item_id, answer').eq('appointment_checklist_id', checklist.id)
-      if (answerError) return fail(answerError.message, 500)
-      const answerMap = new Map((answers || []).map((answer) => [answer.checklist_item_id, answer.answer]))
-      for (const item of requiredItems || []) {
-        const answer = answerMap.get(item.id)
-        if (!answer || typeof answer !== 'object' || Object.keys(answer).length === 0) missing.push({ prompt: item.prompt })
-      }
-    }
-    // This is a valid draft-state response, not a transport failure: the UI uses
-    // it to take the technician directly back to the missing checklist items.
-    if (missing.length) return json({ ok: false, missing_required: missing.map((item: any) => item.prompt) })
     const now = new Date().toISOString()
     const { data: updated, error } = await admin.from('appointments').update({ status: 'completed', completed_at: now, finalized_by: user.id, finalization_note: nullable(body.finalization_note) }).eq('id', appointment.id).eq('status', 'in_progress').select('id').maybeSingle()
     if (error) return fail(error.message, 500)
