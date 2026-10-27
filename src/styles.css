@@ -467,6 +467,114 @@ button:disabled {
   color: #737b83;
   font-size: 12px;
 }
+.agenda-summary {
+  display: grid;
+  gap: 5px;
+  padding: 15px 18px;
+  border: 1px solid #dce9df;
+  background: #eff9f1;
+  color: #1c6e46;
+  border-radius: 14px;
+}
+.agenda-summary span {
+  color: #4d745f;
+  font-size: 13px;
+}
+.agenda-days {
+  display: flex;
+  gap: 9px;
+  overflow-x: auto;
+  padding: 3px 1px 8px;
+}
+.agenda-days button {
+  appearance: none;
+  flex: 0 0 66px;
+  display: grid;
+  gap: 2px;
+  border: 1px solid #dfe4e7;
+  border-radius: 12px;
+  background: #fff;
+  padding: 9px 6px;
+  color: #59636a;
+  cursor: pointer;
+}
+.agenda-days button strong {
+  font-size: 20px;
+  color: #252a2e;
+}
+.agenda-days button small,
+.agenda-days button span {
+  font-size: 11px;
+  text-transform: capitalize;
+}
+.agenda-days button.active {
+  border-color: #ffc514;
+  background: #ffc514;
+  color: #352b00;
+}
+.agenda-days button.active strong {
+  color: #1d2022;
+}
+.agenda-list {
+  display: grid;
+  gap: 10px;
+}
+.agenda-item {
+  display: grid;
+  grid-template-columns: 62px 6px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+  padding: 16px;
+  border: 1px solid #e4e7e9;
+  border-radius: 15px;
+  background: #fff;
+}
+.agenda-item > time {
+  padding-top: 5px;
+  color: #30383e;
+  font-size: 15px;
+  font-weight: 850;
+}
+.agenda-item .status-line {
+  height: auto;
+  min-height: 76px;
+}
+.agenda-item-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.agenda-item-copy > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.agenda-item-copy strong {
+  font-size: 16px;
+}
+.agenda-item-copy > span,
+.agenda-item-copy > b {
+  color: #657078;
+  font-size: 13px;
+}
+.agenda-item-copy > b {
+  color: #252a2e;
+}
+.agenda-item-copy a {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  color: #356481;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tag {
   font-size: 11px;
   white-space: nowrap;
@@ -906,6 +1014,15 @@ button:disabled {
   }
   .appointment-row .tag {
     display: none;
+  }
+  .agenda-item {
+    grid-template-columns: 46px 5px minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px 12px;
+  }
+  .agenda-item .tag {
+    display: inline-flex;
+    font-size: 10px;
   }
 }
 @media (max-width: 430px) {
