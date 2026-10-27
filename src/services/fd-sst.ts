@@ -29,16 +29,26 @@ export async function listAppointments(companyId: string, technicianId?: string)
     if (!appointments.length) return appointments
     const { data: assignments, error: assignmentsError } = await db
       .from('appointment_technicians')
-      .select('appointment_id, technician_id, profiles(full_name)')
+      .select('appointment_id, technician_id')
       .eq('company_id', companyId)
       .in('appointment_id', appointments.map((appointment) => appointment.id))
     if (assignmentsError) throw assignmentsError
+    const { data: memberships, error: membershipsError } = await db
+      .from('company_memberships')
+      .select('user_id, profiles(full_name)')
+      .eq('company_id', companyId)
+      .eq('role', 'technician')
+    if (membershipsError) throw membershipsError
+    const names = new Map((memberships ?? []).map((membership) => [
+      membership.user_id,
+      (Array.isArray(membership.profiles) ? membership.profiles[0] : membership.profiles) as { full_name: string | null } | null,
+    ]))
     const byAppointment = new Map<string, NonNullable<Appointment['appointment_technicians']>>()
     for (const assignment of assignments ?? []) {
       const current = byAppointment.get(assignment.appointment_id) ?? []
       current.push({
         technician_id: assignment.technician_id,
-        profiles: (Array.isArray(assignment.profiles) ? assignment.profiles[0] : assignment.profiles) as { full_name: string | null } | null,
+        profiles: names.get(assignment.technician_id) ?? null,
       })
       byAppointment.set(assignment.appointment_id, current)
     }
