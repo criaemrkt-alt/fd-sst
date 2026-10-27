@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, CheckSquare, ChevronRight, ClipboardList, Factory, FileText, Home, LogOut, Menu, Plus, ShieldCheck, Users, Wrench } from 'lucide-react'
+import { CalendarDays, CheckSquare, ChevronRight, ClipboardList, Factory, FileText, Home, LogOut, MapPin, Menu, Plus, ShieldCheck, Users, Wrench } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { useAuth } from './providers/auth-provider'
 import { supabase } from './lib/supabase'
@@ -85,8 +85,8 @@ function CompanyArea({ memberships }: { memberships: Membership[] }) {
 }
 
 function AdminArea({ membership, memberships, onCompanyChange }: { membership: Membership; memberships: Membership[]; onCompanyChange: (id: string) => void }) {
-  const navigation = <><NavItem to="/app/admin" end icon={<Home />} label="Dashboard" /><NavItem to="/app/admin/appointments" icon={<CalendarDays />} label="Atendimentos" /><NavItem to="/app/admin/clients" icon={<Factory />} label="Clientes" /><NavItem to="/app/admin/technicians" icon={<Users />} label="Técnicos" /><NavItem to="/app/admin/templates" icon={<CheckSquare />} label="Modelos" /><NavItem to="/app/admin/company" icon={<Wrench />} label="Empresa" /></>
-  return <main className="admin-layout"><aside className="sidebar"><Brand /><CompanySelect memberships={memberships} value={membership.company_id} onChange={onCompanyChange} /><nav>{navigation}</nav><SignOut /></aside><header className="mobile-admin-header"><div><Brand /><SignOut /></div><CompanySelect memberships={memberships} value={membership.company_id} onChange={onCompanyChange} /></header><nav className="mobile-admin-nav" aria-label="Navegação administrativa">{navigation}</nav><section className="admin-content"><Routes><Route path="/app/admin" element={<AdminDashboard companyId={membership.company_id} />} /><Route path="/app/admin/appointments" element={<AppointmentsPage companyId={membership.company_id} />} /><Route path="/app/admin/appointments/:id" element={<AdminAttendancePage membership={membership} />} /><Route path="/app/admin/clients" element={<ClientsPage companyId={membership.company_id} />} /><Route path="/app/admin/technicians" element={<TechnicianManagementPage companyId={membership.company_id} />} /><Route path="*" element={<PendingModule />} /></Routes></section></main>
+  const navigation = <><NavItem to="/app/admin" end icon={<Home />} label="Dashboard" /><NavItem to="/app/admin/agenda" icon={<CalendarDays />} label="Agenda" /><NavItem to="/app/admin/appointments" icon={<ClipboardList />} label="Atendimentos" /><NavItem to="/app/admin/clients" icon={<Factory />} label="Clientes" /><NavItem to="/app/admin/technicians" icon={<Users />} label="Técnicos" /><NavItem to="/app/admin/templates" icon={<CheckSquare />} label="Modelos" /><NavItem to="/app/admin/company" icon={<Wrench />} label="Empresa" /></>
+  return <main className="admin-layout"><aside className="sidebar"><Brand /><CompanySelect memberships={memberships} value={membership.company_id} onChange={onCompanyChange} /><nav>{navigation}</nav><SignOut /></aside><header className="mobile-admin-header"><div><Brand /><SignOut /></div><CompanySelect memberships={memberships} value={membership.company_id} onChange={onCompanyChange} /></header><nav className="mobile-admin-nav" aria-label="Navegação administrativa">{navigation}</nav><section className="admin-content"><Routes><Route path="/app/admin" element={<AdminDashboard companyId={membership.company_id} />} /><Route path="/app/admin/agenda" element={<AdminAgendaPage companyId={membership.company_id} />} /><Route path="/app/admin/appointments" element={<AppointmentsPage companyId={membership.company_id} />} /><Route path="/app/admin/appointments/:id" element={<AdminAttendancePage membership={membership} />} /><Route path="/app/admin/clients" element={<ClientsPage companyId={membership.company_id} />} /><Route path="/app/admin/technicians" element={<TechnicianManagementPage companyId={membership.company_id} />} /><Route path="*" element={<PendingModule />} /></Routes></section></main>
 }
 
 function TechnicianArea({ membership, memberships, onCompanyChange }: { membership: Membership; memberships: Membership[]; onCompanyChange: (id: string) => void }) {
@@ -97,6 +97,28 @@ function AdminDashboard({ companyId }: { companyId: string }) {
   const { data: appointments = [], isLoading, error } = useQuery({ queryKey: ['appointments', companyId], queryFn: () => listAppointments(companyId) })
   const stats = useMemo(() => ({ today: appointments.filter((a) => new Date(a.starts_at).toDateString() === new Date().toDateString()).length, inProgress: appointments.filter((a) => a.status === 'in_progress').length, pending: appointments.filter((a) => a.status === 'pending_confirmation').length, completed: appointments.filter((a) => a.status === 'completed').length }), [appointments])
   return <section className="page"><PageHeading title="Dashboard" subtitle="Visão operacional da sua empresa." />{isLoading ? <LoadingState /> : error ? <Notice kind="error">Não foi possível carregar os indicadores.</Notice> : <><div className="metric-grid"><Metric label="Visitas hoje" value={stats.today} tone="blue" /><Metric label="Concluídas" value={stats.completed} tone="green" /><Metric label="Em andamento" value={stats.inProgress} tone="yellow" /><Metric label="Pendentes" value={stats.pending} tone="red" /></div><section className="card"><div className="section-title"><h2>Próximos atendimentos</h2><NavLink to="appointments">Ver agenda</NavLink></div><AppointmentList appointments={appointments.slice(0, 5)} /></section></>}</section>
+}
+
+function AdminAgendaPage({ companyId }: { companyId: string }) {
+  const today = new Date()
+  const [selectedDate, setSelectedDate] = useState(toDateKey(today))
+  const { data: appointments = [], isLoading, error } = useQuery({ queryKey: ['appointments', companyId], queryFn: () => listAppointments(companyId) })
+  const days = useMemo(() => Array.from({ length: 14 }, (_, offset) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() + offset)
+    return { key: toDateKey(date), weekday: new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(date).replace('.', ''), day: date.getDate(), month: new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(date).replace('.', '') }
+  }), [])
+  const dailyAppointments = appointments.filter((appointment) => toDateKey(new Date(appointment.starts_at)) === selectedDate && appointment.status !== 'cancelled')
+  const current = appointments.filter((appointment) => appointment.status === 'in_progress')
+
+  return <section className="page"><PageHeading title="Agenda dos técnicos" subtitle="Acompanhe onde cada técnico está e os próximos atendimentos programados." />{isLoading ? <LoadingState /> : error ? <Notice kind="error">Não foi possível carregar a agenda dos técnicos.</Notice> : <><section className="agenda-summary"><strong>{current.length ? `${current.length} técnico(s) em atendimento agora` : 'Nenhum técnico em atendimento agora'}</strong><span>O local exibido é o definido no agendamento. A localização GPS em tempo real não é compartilhada por esta agenda.</span></section><nav className="agenda-days" aria-label="Escolha o dia da agenda">{days.map((day) => <button type="button" key={day.key} className={day.key === selectedDate ? 'active' : ''} onClick={() => setSelectedDate(day.key)}><small>{day.weekday}</small><strong>{day.day}</strong><span>{day.month}</span></button>)}</nav><section className="agenda-list">{dailyAppointments.length ? dailyAppointments.map((appointment) => <AdminAgendaItem key={appointment.id} appointment={appointment} />) : <EmptyState title="Sem atendimentos neste dia">Escolha outra data ou agende um atendimento para os técnicos.</EmptyState>}</section></>}</section>
+}
+
+function AdminAgendaItem({ appointment }: { appointment: Appointment }) {
+  const technicians = appointment.appointment_technicians?.map((item) => item.profiles?.full_name).filter(Boolean).join(', ') || 'Técnico ainda não atribuído'
+  const location = appointment.location_text || appointment.clients?.address_line || appointment.clients?.name || 'Local não informado'
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`
+  return <article className="agenda-item"><time>{new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(appointment.starts_at))}</time><span className="status-line" data-status={appointment.status} /><div className="agenda-item-copy"><div><strong>{appointment.clients?.name || 'Cliente'}</strong><StatusBadge status={appointment.status} /></div><span>{appointment.service_type}</span><b>{technicians}</b><a href={mapUrl} target="_blank" rel="noreferrer"><MapPin size={15} /> {location}</a></div></article>
 }
 
 function TechnicianDashboard({ membership }: { membership: Membership }) {
@@ -149,3 +171,4 @@ function CompanySelect({ memberships, value, onChange }: { memberships: Membersh
 function NavItem({ to, icon, label, end = false }: { to: string; icon: React.ReactNode; label: string; end?: boolean }) { return <NavLink to={to} end={end} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>{icon}<span>{label}</span></NavLink> }
 function SignOut() { return <button className="sign-out" onClick={() => void supabase!.auth.signOut()}><LogOut size={18} /> Sair</button> }
 function formatDate(value: string) { return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) }
+function toDateKey(value: Date) { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}` }
