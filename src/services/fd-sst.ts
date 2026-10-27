@@ -33,16 +33,12 @@ export async function listAppointments(companyId: string, technicianId?: string)
       .eq('company_id', companyId)
       .in('appointment_id', appointments.map((appointment) => appointment.id))
     if (assignmentsError) throw assignmentsError
-    const { data: memberships, error: membershipsError } = await db
-      .from('company_memberships')
-      .select('user_id, profiles(full_name)')
-      .eq('company_id', companyId)
-      .eq('role', 'technician')
-    if (membershipsError) throw membershipsError
-    const names = new Map((memberships ?? []).map((membership) => [
-      membership.user_id,
-      (Array.isArray(membership.profiles) ? membership.profiles[0] : membership.profiles) as { full_name: string | null } | null,
-    ]))
+    const technicianIds = [...new Set((assignments ?? []).map((assignment) => assignment.technician_id))]
+    const { data: profiles, error: profilesError } = technicianIds.length
+      ? await db.from('profiles').select('id, full_name').in('id', technicianIds)
+      : { data: [], error: null }
+    if (profilesError) throw profilesError
+    const names = new Map((profiles ?? []).map((profile) => [profile.id, { full_name: profile.full_name }]))
     const byAppointment = new Map<string, NonNullable<Appointment['appointment_technicians']>>()
     for (const assignment of assignments ?? []) {
       const current = byAppointment.get(assignment.appointment_id) ?? []
