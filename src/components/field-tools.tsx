@@ -5,6 +5,7 @@ import { useForm, type UseFormRegister } from 'react-hook-form'
 import type { Membership } from '../types/domain'
 import { listAppointments, listClients, saveTechnicianFieldRecord } from '../services/fd-sst'
 import { Button, Modal, Notice } from './ui'
+import { useAuth } from '../providers/auth-provider'
 
 const localDateTime = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 type ClientSelectProps = { companyId: string; register: UseFormRegister<any> }
@@ -27,8 +28,9 @@ export function TechnicianToolsPage({ membership }: { membership: Membership }) 
 function RecordFooter({ pending, onClose, label }: { pending: boolean; onClose: () => void; label: string }) { return <footer className="form-actions"><Button type="button" className="button-secondary" onClick={onClose}>Cancelar</Button><Button disabled={pending}>{pending ? 'Salvando...' : label}</Button></footer> }
 
 function TravelModal({ membership, onClose }: { membership: Membership; onClose: () => void }) {
+  const { user } = useAuth()
   const [started, setStarted] = useState(() => localStorage.getItem(`fd-sst-travel-${membership.company_id}`) || '')
-  const { data: appointments = [] } = useQuery({ queryKey: ['technician-appointments', membership.company_id], queryFn: () => listAppointments(membership.company_id) })
+  const { data: appointments = [] } = useQuery({ queryKey: ['technician-appointments', membership.company_id, user?.id], queryFn: () => listAppointments(membership.company_id, user!.id), enabled: !!user?.id })
   const { register, handleSubmit } = useForm<{ appointment_id: string; distance_km: string; notes: string }>({ defaultValues: { appointment_id: '', distance_km: '', notes: '' } })
   const mutation = useMutation({ mutationFn: (v: { appointment_id: string; distance_km: string; notes: string }) => saveTechnicianFieldRecord('save_travel', { company_id: membership.company_id, appointment_id: v.appointment_id || undefined, departed_at: started || localDateTime(), arrived_at: localDateTime(), ended_at: localDateTime(), distance_km: v.distance_km ? Number(v.distance_km) : null, distance_source: 'manual', notes: v.notes }), onSuccess: () => { localStorage.removeItem(`fd-sst-travel-${membership.company_id}`); onClose() } })
   const start = () => { const time = localDateTime(); localStorage.setItem(`fd-sst-travel-${membership.company_id}`, time); setStarted(time) }
@@ -37,7 +39,7 @@ function TravelModal({ membership, onClose }: { membership: Membership; onClose:
 
 function HeatModal({ companyId, onClose }: { companyId: string; onClose: () => void }) {
   const { register, handleSubmit, watch } = useForm<{ client_id: string; tbn: string; tg: string; tbs: string; solar_exposure: boolean; activity_description: string; notes: string }>({ defaultValues: { solar_exposure: false } })
-  const values = watch(); const tbn = Number(values.tbn), tg = Number(values.tg), tbs = Number(values.tbs); const hasInputs = Number.isFinite(tbn) && Number.isFinite(tg) && (!values.solar_exposure || Number.isFinite(tbs)); const result = hasInputs ? (values.solar_exposure ? .7 * tbn + .2 * tg + .1 * tbs : .7 * tbn + .3 * tg).toFixed(2) : null
+  const values = watch(); const tbn = Number(values.tbn), tg = Number(values.tg), tbs = Number(values.tbs); const present = (value: string | undefined) => value !== undefined && value.trim() !== ''; const hasInputs = present(values.tbn) && present(values.tg) && Number.isFinite(tbn) && Number.isFinite(tg) && (!values.solar_exposure || (present(values.tbs) && Number.isFinite(tbs))); const result = hasInputs ? (values.solar_exposure ? .7 * tbn + .2 * tg + .1 * tbs : .7 * tbn + .3 * tg).toFixed(2) : null
   const mutation = useMutation({ mutationFn: (v: typeof values) => saveTechnicianFieldRecord('save_heat_assessment', { company_id: companyId, ...v, tbn: Number(v.tbn), tg: Number(v.tg), tbs: v.tbs ? Number(v.tbs) : null }), onSuccess: onClose })
   return <Modal title="Calor (IBUTG)" onClose={onClose}><form className="form-grid" onSubmit={handleSubmit((v) => mutation.mutate(v))}><ClientSelect companyId={companyId} register={register} /><label>Temperatura de bulbo natural (tbn)<input inputMode="decimal" type="number" step="0.1" {...register('tbn', { required: true })} required /></label><label>Temperatura de globo (tg)<input inputMode="decimal" type="number" step="0.1" {...register('tg', { required: true })} required /></label><label className="check-line full"><input type="checkbox" {...register('solar_exposure')} />Com carga solar direta</label>{values.solar_exposure && <label>Temperatura de bulbo seco (tbs)<input inputMode="decimal" type="number" step="0.1" {...register('tbs', { required: true })} required /></label>}<label className="full">Atividade / posto<textarea rows={2} {...register('activity_description')} placeholder="Ex.: operador de forno, ambiente externo" /></label>{result && <div className="calculation-result"><strong>IBUTG calculado: {result}</strong><small>{values.solar_exposure ? '0,7 tbn + 0,2 tg + 0,1 tbs' : '0,7 tbn + 0,3 tg'}</small></div>}<Notice kind="info">Registro preliminar: a conclusão de exposição exige validação técnica, taxa metabólica, aclimatização, vestimentas e demais condições aplicáveis.</Notice><label className="full">Observações<textarea rows={2} {...register('notes')} /></label>{mutation.error && <Notice kind="error">{mutation.error.message}</Notice>}<RecordFooter pending={mutation.isPending} onClose={onClose} label="Salvar avaliação" /></form></Modal>
 }
