@@ -54,9 +54,9 @@ export function TechnicianAgendaPage({ membership }: { membership: Membership })
 
 export function TechnicianActivitiesPage({ membership }: { membership: Membership }) {
   const { user } = useAuth()
-  const { data = [], isLoading } = useQuery({ queryKey: ['technician-appointments', membership.company_id, user?.id], queryFn: () => listAppointments(membership.company_id, user!.id) })
+  const { data = [], isLoading, error } = useQuery({ queryKey: ['technician-appointments', membership.company_id, user?.id], queryFn: () => listAppointments(membership.company_id, user!.id) })
   const actionable = data.filter((item) => !['completed', 'cancelled'].includes(item.status))
-  return <section className="tech-page"><header className="tech-title-row"><div><h1>Atividades</h1><p>Priorize o que precisa ser executado em campo.</p></div></header>{isLoading ? <LoadingState /> : actionable.length ? <section className="card"><div className="section-title"><h2>Para executar</h2><span>{actionable.length}</span></div><TechnicianAppointmentList appointments={actionable} /></section> : <EmptyState title="Tudo em dia">Você não possui atendimentos pendentes. Use “Novo” na agenda quando precisar planejar uma visita.</EmptyState>}</section>
+  return <section className="tech-page"><header className="tech-title-row"><div><h1>Atividades</h1><p>Priorize o que precisa ser executado em campo.</p></div></header>{isLoading ? <LoadingState /> : error ? <Notice kind="error">Não foi possível carregar as atividades. Verifique sua conexão e tente novamente.</Notice> : actionable.length ? <section className="card"><div className="section-title"><h2>Para executar</h2><span>{actionable.length}</span></div><TechnicianAppointmentList appointments={actionable} /></section> : <EmptyState title="Tudo em dia">Você não possui atendimentos pendentes. Use “Novo” na agenda quando precisar planejar uma visita.</EmptyState>}</section>
 }
 
 export function TechnicianMorePage({ membership }: { membership: Membership }) {
