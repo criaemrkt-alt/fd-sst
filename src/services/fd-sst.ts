@@ -25,6 +25,25 @@ export async function saveClient(input: Partial<Client> & Pick<Client, 'company_
 
 export async function listAppointments(companyId: string, technicianId?: string) {
   const db = client()
+  const withTechnicians = async (appointments: Appointment[]) => {
+    if (!appointments.length) return appointments
+    const { data: assignments, error: assignmentsError } = await db
+      .from('appointment_technicians')
+      .select('appointment_id, technician_id, profiles(full_name)')
+      .eq('company_id', companyId)
+      .in('appointment_id', appointments.map((appointment) => appointment.id))
+    if (assignmentsError) throw assignmentsError
+    const byAppointment = new Map<string, NonNullable<Appointment['appointment_technicians']>>()
+    for (const assignment of assignments ?? []) {
+      const current = byAppointment.get(assignment.appointment_id) ?? []
+      current.push({
+        technician_id: assignment.technician_id,
+        profiles: (Array.isArray(assignment.profiles) ? assignment.profiles[0] : assignment.profiles) as { full_name: string | null } | null,
+      })
+      byAppointment.set(assignment.appointment_id, current)
+    }
+    return appointments.map((appointment) => ({ ...appointment, appointment_technicians: byAppointment.get(appointment.id) ?? [] }))
+  }
   // Load assignments separately. This avoids a fragile embedded PostgREST
   // relation from turning an agenda into a full query failure on mobile.
   if (technicianId) {
@@ -43,7 +62,7 @@ export async function listAppointments(companyId: string, technicianId?: string)
       .in('id', appointmentIds)
       .order('starts_at')
     if (error) throw error
-    return data as Appointment[]
+    return withTechnicians(data as Appointment[])
   }
   const { data, error } = await db
     .from('appointments')
@@ -51,7 +70,7 @@ export async function listAppointments(companyId: string, technicianId?: string)
     .eq('company_id', companyId)
     .order('starts_at')
   if (error) throw error
-  return data as Appointment[]
+  return withTechnicians(data as Appointment[])
 }
 
 export async function updateAppointmentStatus(appointment: Appointment, status: Appointment['status']) {
