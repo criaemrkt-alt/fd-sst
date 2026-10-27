@@ -50,7 +50,7 @@ const historyFields = {
   training: { location_text: 'Local', workload_minutes: 'Carga horária em minutos', instructor_name: 'Instrutor', syllabus: 'Conteúdo', notes: 'Observações' },
 }
 
-function RecordFooter({ pending, onClose, label }: { pending: boolean; onClose: () => void; label: string }) { return <footer className="form-actions"><Button type="button" className="button-secondary" onClick={onClose}>Cancelar</Button><Button disabled={pending}>{pending ? 'Salvando...' : label}</Button></footer> }
+function RecordFooter({ pending, onClose, label }: { pending: boolean; onClose: () => void; label: string }) { return <><Notice kind="info">É necessário estar conectado à internet para salvar este registro. Não feche o formulário até confirmar o salvamento.</Notice><footer className="form-actions"><Button type="button" className="button-secondary" onClick={onClose}>Cancelar</Button><Button disabled={pending}>{pending ? 'Salvando...' : label}</Button></footer></> }
 
 function TravelModal({ membership, onClose }: { membership: Membership; onClose: () => void }) {
   const { user } = useAuth()
