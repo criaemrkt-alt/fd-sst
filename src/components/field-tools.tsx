@@ -6,6 +6,7 @@ import type { Membership } from '../types/domain'
 import { listAppointments, listClients, saveTechnicianFieldRecord } from '../services/fd-sst'
 import { Button, Modal, Notice } from './ui'
 import { useAuth } from '../providers/auth-provider'
+import { supabase } from '../lib/supabase'
 
 const localDateTime = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16) }
 type ClientSelectProps = { companyId: string; register: UseFormRegister<any> }
@@ -16,13 +17,37 @@ function ClientSelect({ companyId, register }: ClientSelectProps) {
 
 export function TechnicianToolsPage({ membership }: { membership: Membership }) {
   const [open, setOpen] = useState<'travel' | 'heat' | 'accident' | 'training' | null>(null)
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const [historyType, setHistoryType] = useState<'travel' | 'heat' | 'accident' | 'training'>('travel')
+  const { data: clients = [] } = useQuery({ queryKey: ['clients', membership.company_id, 'all'], queryFn: () => listClients(membership.company_id) })
+  const history = useQuery({
+    queryKey: ['field-history', membership.company_id, user?.id, historyType],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      if (!supabase || !user) throw new Error('Sessão indisponível')
+      const config = { travel: ['travel_logs', 'technician_id', 'created_at'], heat: ['heat_assessments', 'created_by', 'measured_at'], accident: ['accident_investigations', 'created_by', 'occurred_at'], training: ['trainings', 'created_by', 'starts_at'] } as const
+      const [table, owner, date] = config[historyType]
+      const { data, error } = await supabase.from(table).select('*').eq('company_id', membership.company_id).eq(owner, user.id).order(date, { ascending: false }).limit(100)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+  const closeTool = () => { setOpen(null); void queryClient.invalidateQueries({ queryKey: ['field-history', membership.company_id, user?.id] }) }
   const tools = [
     ['travel', CarFront, 'Deslocamento e KM', 'Marque saída, chegada e quilometragem.'],
     ['heat', ThermometerSun, 'Calor (IBUTG)', 'Calcule e registre a avaliação térmica.'],
     ['accident', AlertTriangle, 'Acidente', 'Registre a investigação e recomendações.'],
     ['training', GraduationCap, 'Treinamentos', 'Cadastre treinamento e conteúdo aplicado.'],
   ] as const
-  return <section className="tech-page"><header className="tech-title-row"><div><h1>Ferramentas de campo</h1><p>Registros rápidos da rotina técnica.</p></div></header><div className="field-tool-grid">{tools.map(([key, Icon, title, copy]) => <button key={key} className="field-tool-card" onClick={() => setOpen(key)}><Icon /><strong>{title}</strong><small>{copy}</small></button>)}</div>{open === 'travel' && <TravelModal membership={membership} onClose={() => setOpen(null)} />}{open === 'heat' && <HeatModal companyId={membership.company_id} onClose={() => setOpen(null)} />}{open === 'accident' && <AccidentModal companyId={membership.company_id} onClose={() => setOpen(null)} />}{open === 'training' && <TrainingModal companyId={membership.company_id} onClose={() => setOpen(null)} />}</section>
+  return <section className="tech-page"><header className="tech-title-row"><div><h1>Ferramentas de campo</h1><p>Registros rápidos da rotina técnica.</p></div></header><div className="field-tool-grid">{tools.map(([key, Icon, title, copy]) => <button key={key} className="field-tool-card" onClick={() => setOpen(key)}><Icon /><strong>{title}</strong><small>{copy}</small></button>)}</div><section className="card"><div className="section-title"><h2>Meus registros</h2></div><label>Tipo de registro<select value={historyType} onChange={(event) => setHistoryType(event.target.value as typeof historyType)}><option value="travel">Deslocamentos</option><option value="heat">Medições de calor</option><option value="accident">Investigações de acidente</option><option value="training">Treinamentos</option></select></label>{history.isLoading ? <p>Carregando registros...</p> : history.error ? <Notice kind="error">Não foi possível carregar os registros. Verifique sua conexão e tente novamente.</Notice> : !history.data?.length ? <p>Nenhum registro salvo nesta categoria.</p> : <div className="field-history">{history.data.map((record: any) => <details key={record.id} className="field-history-record"><summary><strong>{historyType === 'travel' ? `${record.distance_km ?? '—'} km` : historyType === 'heat' ? `IBUTG: ${record.calculated_ibutg ?? '—'}` : historyType === 'accident' ? record.occurrence_type || 'Investigação de acidente' : record.name}</strong><small>{new Date(record.measured_at || record.occurred_at || record.starts_at || record.created_at).toLocaleString('pt-BR')}</small></summary>{record.client_id && <p><b>Cliente:</b> {clients.find((client) => client.id === record.client_id)?.name || 'Não disponível'}</p>}{Object.entries(historyFields[historyType]).map(([key, label]) => record[key] !== null && record[key] !== undefined && record[key] !== '' ? <p key={key}><b>{label}:</b> {typeof record[key] === 'boolean' ? (record[key] ? 'Sim' : 'Não') : String(record[key])}</p> : null)}{historyType === 'heat' && <Notice kind="info">Resultado preliminar, sujeito à validação técnica.</Notice>}</details>)}</div>}</section>{open === 'travel' && <TravelModal membership={membership} onClose={closeTool} />}{open === 'heat' && <HeatModal companyId={membership.company_id} onClose={closeTool} />}{open === 'accident' && <AccidentModal companyId={membership.company_id} onClose={closeTool} />}{open === 'training' && <TrainingModal companyId={membership.company_id} onClose={closeTool} />}</section>
+}
+
+const historyFields = {
+  travel: { departed_at: 'Saída', arrived_at: 'Chegada', ended_at: 'Encerramento', distance_km: 'Quilometragem', notes: 'Observações' },
+  heat: { tbn: 'Bulbo natural', tg: 'Temperatura de globo', tbs: 'Bulbo seco', solar_exposure: 'Carga solar direta', activity_description: 'Atividade / posto', notes: 'Observações' },
+  accident: { location_text: 'Local', worker_name: 'Colaborador', worker_role: 'Função', description: 'Descrição', circumstances: 'Circunstâncias', possible_causes: 'Possíveis causas', immediate_measures: 'Medidas imediatas', recommendations: 'Recomendações' },
+  training: { location_text: 'Local', workload_minutes: 'Carga horária em minutos', instructor_name: 'Instrutor', syllabus: 'Conteúdo', notes: 'Observações' },
 }
 
 function RecordFooter({ pending, onClose, label }: { pending: boolean; onClose: () => void; label: string }) { return <footer className="form-actions"><Button type="button" className="button-secondary" onClick={onClose}>Cancelar</Button><Button disabled={pending}>{pending ? 'Salvando...' : label}</Button></footer> }
