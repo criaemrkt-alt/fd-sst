@@ -22,15 +22,33 @@ Deno.test('coordinates, uncertainty, verified-only references and original prese
  assert(decoded.bitmap.some((v:number,i:number)=>v!==unchanged[i]),'certain box drawn')
  assert(original.bitmap.every((v:number,i:number)=>v===before[i]),'source image preserved')
 })
-Deno.test('disabled provider never calls external AI; quota pauses before fetch',async()=>{
+Deno.test('disabled provider never calls external AI; provider 429 pauses processing',async()=>{
  let reserves=0
- const unavailable=await cloudflareVision(()=>undefined,async()=>{reserves++;return false}).analyze(new Uint8Array(),'p')
+ const unavailable=await cloudflareVision(()=>undefined,async()=>{reserves++}).analyze(new Uint8Array(),'p')
  assert(unavailable.status==='unavailable'&&reserves===0,'no credential means no call')
  const values:Record<string,string>={CF_AI_ENABLED:'true',CF_AI_FREE_PLAN_CONFIRMED:'true',CF_ACCOUNT_ID:'test',CF_AI_TOKEN:'test'}
  let paused=false
- try{await cloudflareVision(k=>values[k],async()=>false).analyze(new Uint8Array(),'p')}catch(e){paused=(e as Error).message==='quota_exhausted'}
- assert(paused,'quota must stop before external call')
+ const originalFetch=globalThis.fetch
+ try{
+  globalThis.fetch=async()=>new Response('',{status:429})
+  try{await cloudflareVision(k=>values[k],async()=>undefined).analyze(new Uint8Array(),'p')}catch(e){paused=(e as Error).message==='quota_exhausted'}
+ }finally{globalThis.fetch=originalFetch}
+ assert(paused,'provider quota must pause processing')
  assert(reportIsPartial([{status:'done',analysis:unavailable}]),'partial is explicit')
+})
+Deno.test('no application daily cap, even when a legacy limit secret is still present',async()=>{
+ const values:Record<string,string>={CF_AI_ENABLED:'true',CF_AI_FREE_PLAN_CONFIRMED:'true',CF_ACCOUNT_ID:'test',CF_AI_TOKEN:'test',CF_AI_DAILY_CALL_LIMIT:'1'}
+ let attempts=0,requests=0
+ const originalFetch=globalThis.fetch
+ try{
+  globalThis.fetch=async()=>{requests++;return Response.json({result:{response:JSON.stringify({findings:[],note:'Teste sintético'})}})}
+  const provider=cloudflareVision(k=>values[k],async()=>{attempts++})
+  for(let i=0;i<3;i++)assert((await provider.analyze(new Uint8Array(),'p')).status==='analyzed','legacy cap must not block')
+  assert(attempts===3&&requests===3,'all requests counted without an app cap')
+  values.CF_AI_FREE_PLAN_CONFIRMED='false'
+  assert((await provider.analyze(new Uint8Array(),'p')).status==='unavailable','free-plan confirmation still required')
+  assert(requests===3,'no extra request without confirmed free plan')
+ }finally{globalThis.fetch=originalFetch}
 })
 Deno.test('photo/model failure preserves original slide; illustrative simulations have an explicit label',async()=>{
  const jpeg=await new Image(120,100).fill(0x555555ff).encodeJPEG(55)

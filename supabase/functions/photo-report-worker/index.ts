@@ -7,7 +7,7 @@ const env=(key:string)=>Deno.env.get(key)
 const db=createClient(env('SUPABASE_URL')!,env('SUPABASE_SERVICE_ROLE_KEY')!)
 const bucket='fd-sst-ai-reports'
 const checked=async(p:PromiseLike<any>)=>{const result=await p;if(result.error)throw result.error;return result.data}
-const vision=cloudflareVision(env,async()=>{const limit=Number(env('CF_AI_DAILY_CALL_LIMIT')||0);if(!Number.isInteger(limit)||limit<1||limit>200)return false;const {data,error}=await db.rpc('reserve_photo_report_call',{call_limit:limit});if(error)throw error;return data===true})
+const vision=cloudflareVision(env,async()=>{const {error}=await db.rpc('record_photo_report_call');if(error)throw error})
 Deno.serve(async(request:Request)=>{
  if(request.method!=='POST')return new Response('Method not allowed',{status:405})
  const body=await request.json().catch(()=>({}))

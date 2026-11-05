@@ -30,10 +30,9 @@ CF_ACCOUNT_ID=<identificador da conta>
 CF_AI_TOKEN=<token restrito ao Workers AI>
 CF_AI_ENABLED=true
 CF_AI_FREE_PLAN_CONFIRMED=true
-CF_AI_DAILY_CALL_LIMIT=<limite inicial pequeno, entre 1 e 200>
 ```
 
-Sem todos os gates, não há requisição externa. Sem limite positivo, a reserva de cota recusa chamadas. A reserva é atômica e diária em UTC; HTTP 429 pausa uma hora e permite retomada. A Cloudflare exige aceite inicial da licença Meta para esse modelo; esse aceite não foi enviado em nome da FD. Os limites de chamadas não equivalem a neurons: homologar o consumo real em poucas fotografias antes de aumentar. **Não ativar plano pago, créditos ou cobrança automática.**
+Sem todos os gates, não há requisição externa. A pedido do responsável, o aplicativo não impõe limite diário de chamadas; `CF_AI_DAILY_CALL_LIMIT` não é necessário e é ignorado pelo worker, mesmo se já existir no servidor. Um contador atômico registra tentativas por dia em UTC apenas para acompanhamento. As cotas do plano da Cloudflare continuam valendo: HTTP 429 pausa uma hora e permite retomada. A Cloudflare exige aceite inicial da licença Meta para esse modelo; esse aceite não foi enviado em nome da FD. Chamadas não equivalem a neurons: conferir o consumo real durante a homologação. **Não ativar plano pago, créditos ou cobrança automática.**
 
 O modelo configurado é `@cf/meta/llama-3.2-11b-vision-instruct`; as fotos enviadas são cópias reduzidas, sem nome do cliente, técnico ou observações anexadas ao prompt. Trabalhadores podem aparecer nas fotos; a FD ainda precisa definir a base legal, acesso interno, prazo de retenção e eventuais exigências de localização dos dados. A documentação do modelo declara zero data retention. Isso não substitui a avaliação da FD sobre o tratamento das imagens.
 
@@ -75,7 +74,7 @@ A reativação usa `enabled=true`. Monitorar `photo_report_jobs`, `photo_report_
 - Carga local de 100 imagens de alta entropia: JPEG de 106.572 bytes; PPTX de 12.396.998 bytes, montagem aproximadamente 0,7 s nesta máquina. Esses tempos não são garantia do servidor. O teste local usa ImageScript npm 1.3; a Edge usa a versão Deno 1.2.15, testada separadamente em uma fotografia real autorizada.
 - ZIP/Open XML, número de imagens e observações validados. LibreOffice abriu um PPTX real e exportou capa e segunda página como PNG; técnico primeiro foi conferido visualmente. Nenhum PDF foi produzido.
 - Supabase real: finalização criou um único job mesmo após nova tentativa de enqueue; cron/worker completaram sem navegador. Um atendimento de teste sem fotos gerou 85.421 bytes; uma fotografia autorizada gerou arquivo parcial de 148.983 bytes com a compressão atual.
-- Cota no PostgreSQL: limites nulo, zero e acima de 200 recusados; segunda reserva com limite 1 bloqueada. Testes em transação revertida, sem consumir cota real. Token de dispatch já consumido não pôde ser reutilizado; usuários comuns não têm permissão de reserva.
+- O mecanismo anterior de cota no PostgreSQL foi testado antes da solicitação de remoção do limite. O worker atual usa `record_photo_report_call` somente para acompanhamento, sem bloquear chamadas por dia. Foram verificadas 205 contagens em transação revertida, sem chamadas ao provedor, e a ausência de acesso ao contador por usuários comuns. Token de dispatch já consumido não pôde ser reutilizado.
 - Montagem no Supabase com 100 cópias derivadas preparadas: 6.789.859 bytes, status parcial, sem chamada externa. Essa prova de montagem **não equivale** a analisar 100 fotos por IA ou testar 100 uploads de originais.
 - RLS real: técnico designado leu o job; outro técnico da mesma empresa não; administrador de outra empresa não leu job nem artefato; ADM da empresa leu os originais mesmo com job recolocado temporariamente em fila, dentro de transação revertida.
 - A execução de visão real, qualidade das marcações sobre saída real de modelo, edição fotográfica, cota real do provedor e homologação de mobile continuam pendentes.

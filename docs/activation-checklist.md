@@ -1,12 +1,12 @@
 # FD SST — sequência de conclusão
 
-Atualizado em 05/11/2026. O trabalho deve avançar em partes verificáveis. Não ativar plano pago, créditos ou inferências antes da configuração e do teste limitado.
+Atualizado em 05/11/2026. O trabalho deve avançar em partes verificáveis. Não ativar plano pago, créditos ou inferências antes da configuração e da confirmação do plano gratuito. O responsável dispensou um limite diário adicional no aplicativo.
 
 | Etapa | Quem faz | Resultado esperado |
 | --- | --- | --- |
 | 1. Conta gratuita Cloudflare | Responsável pela FD | Acesso a Workers AI → Use REST API |
 | 2. Credenciais e licença | Responsável, orientado pelo assistente | Token restrito e Account ID salvos somente no servidor; licença do modelo verificada e aceita pelo responsável |
-| 3. Teste de visão | Assistente e responsável | Uma fotografia sintética/autorizada analisada; apontamentos revisados; limite diário pequeno |
+| 3. Teste de visão | Assistente e responsável | Uma fotografia sintética/autorizada analisada; apontamentos revisados; acompanhamento da cota do provedor |
 | 4. Logo oficial | Responsável fornece o arquivo original; assistente aplica | Logo fiel no PPTX, conferido antes de publicar |
 | 5. Fotos sem conexão | Assistente implementa; responsável homologa no celular | Captura persistida, retomada e finalização após envio confirmado |
 | 6. Simulação ilustrativa | Assistente integra e valida; responsável autoriza o serviço | Edição restrita a situação apropriada, claramente rotulada e sem comprometer originais |
@@ -29,10 +29,9 @@ CF_ACCOUNT_ID=<Account ID da Cloudflare>
 CF_AI_TOKEN=<token restrito criado pelo responsável>
 CF_AI_ENABLED=false
 CF_AI_FREE_PLAN_CONFIRMED=true
-CF_AI_DAILY_CALL_LIMIT=3
 ```
 
-`CF_AI_FREE_PLAN_CONFIRMED=true` só deve ser definido depois de conferir que a conta continua no plano gratuito, sem cobrança excedente/créditos habilitados. Manter `CF_AI_ENABLED=false` até verificar a licença Meta e escolher a primeira evidência de teste. A licença não é aceita automaticamente pelo código. Somente depois, habilitar o teste com `CF_AI_ENABLED=true`.
+`CF_AI_FREE_PLAN_CONFIRMED=true` só deve ser definido depois de conferir que a conta continua no plano gratuito, sem cobrança excedente/créditos habilitados. Manter `CF_AI_ENABLED=false` até verificar a licença Meta e escolher a primeira evidência de teste. A licença não é aceita automaticamente pelo código. Somente depois, habilitar o teste com `CF_AI_ENABLED=true`. Não cadastrar `CF_AI_DAILY_CALL_LIMIT`: o limite do aplicativo foi retirado a pedido do responsável. Se esse segredo já existir, o worker o ignora. As cotas próprias da Cloudflare continuam valendo; o aplicativo apenas acompanha as tentativas e retoma após respostas de cota esgotada.
 
 Usar um novo atendimento de teste com uma fotografia. Relatórios antigos já concluídos com ressalvas não são reanalisados apenas porque uma chave foi cadastrada. O assistente deve conferir a configuração, o job, a cota e o resultado antes de ampliar o uso. Não enviar imagens de trabalhadores como teste inicial quando uma evidência sintética puder validar a integração.
 
@@ -59,7 +58,7 @@ Não marcar essa homologação física como concluída antes de executá-la. Os 
 
 ## Verificação automatizada do incremento offline
 
-Os 33 testes do aplicativo passaram, incluindo oito casos de persistência/sincronização da fila, quatro de upload idempotente e três de componentes da captura offline. O teste da inspeção força o estado offline do React Query, salva pelo formulário, recria a tela e confere a observação recuperada do IndexedDB. Também foi validado que uma captura nova pode ser gravada durante um upload lento, que falhas preservam o original e que outro login não envia a fila. Os sete testes do gerador de PPTX permanecem aprovados. Build TypeScript/Vite aprovado.
+Os 33 testes do aplicativo passaram, incluindo oito casos de persistência/sincronização da fila, quatro de upload idempotente e três de componentes da captura offline. O teste da inspeção força o estado offline do React Query, salva pelo formulário, recria a tela e confere a observação recuperada do IndexedDB. Também foi validado que uma captura nova pode ser gravada durante um upload lento, que falhas preservam o original e que outro login não envia a fila. Os oito testes do worker/PPTX estão aprovados, incluindo a ausência de limite diário do app mesmo com um segredo antigo configurado e a pausa após HTTP 429 da Cloudflare. Build TypeScript/Vite aprovado.
 
 A confirmação do envio real no celular e o teste autenticado do fluxo completo continuam pendentes. O servidor trata colisão de cadastro por empresa/atendimento/caminho/autor e mantém as permissões existentes; a lógica de retry no cliente foi testada com APIs simuladas.
 
