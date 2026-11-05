@@ -7,7 +7,7 @@ const env=(key:string)=>Deno.env.get(key)
 const db=createClient(env('SUPABASE_URL')!,env('SUPABASE_SERVICE_ROLE_KEY')!)
 const bucket='fd-sst-ai-reports'
 const checked=async(p:PromiseLike<any>)=>{const result=await p;if(result.error)throw result.error;return result.data}
-const vision=cloudflareVision(env,async()=>{const {data,error}=await db.rpc('reserve_photo_report_call',{call_limit:Math.min(200,Number(env('CF_AI_DAILY_CALL_LIMIT')||0))});if(error)throw error;return data===true})
+const vision=cloudflareVision(env,async()=>{const limit=Number(env('CF_AI_DAILY_CALL_LIMIT')||0);if(!Number.isInteger(limit)||limit<1||limit>200)return false;const {data,error}=await db.rpc('reserve_photo_report_call',{call_limit:limit});if(error)throw error;return data===true})
 Deno.serve(async(request:Request)=>{
  if(request.method!=='POST')return new Response('Method not allowed',{status:405})
  const body=await request.json().catch(()=>({}))
@@ -21,7 +21,12 @@ Deno.serve(async(request:Request)=>{
    const item=pending[0]
    let warning:string|null=null
    await checked(db.from('photo_report_jobs').update({status:'analyzing'}).eq('id',job.id))
-   try{
+   if(item.attempts>=3){
+    await checked(db.from('photo_report_items').update({status:'failed',error_code:'photo_worker_interrupted'}).eq('id',item.id))
+   }else try{
+    // Persist before decoding: even a runtime memory/CPU shutdown consumes an
+    // item attempt, so one invalid photograph cannot trap the entire report.
+    await checked(db.from('photo_report_items').update({attempts:item.attempts+1}).eq('id',item.id))
     const original=await checked(db.storage.from(item.original_bucket).download(item.original_path))
     if(original.size>12*1024*1024)throw new Error('photo_exceeds_worker_memory_budget')
     const {image,jpeg}=await workingImage(new Uint8Array(await original.arrayBuffer()))
@@ -44,6 +49,7 @@ Deno.serve(async(request:Request)=>{
    }catch(error){
     const code=error instanceof Error?error.message:'photo_processing_failed'
     if(code==='quota_exhausted'){
+     await checked(db.from('photo_report_items').update({attempts:item.attempts}).eq('id',item.id))
      await checked(db.from('photo_report_jobs').update({lease_until:null,next_attempt_at:new Date(Date.now()+3600000).toISOString(),error_code:'quota_exhausted',warning:'Cota de IA atingida. Processamento pausado para nova tentativa.'}).eq('id',job.id));return Response.json({paused:true})
     }
     const safeCode=/^vision_http_\d{3}$/.test(code)||['invalid_model_schema','invalid_finding_fields','working_copy_size_limit','photo_exceeds_worker_memory_budget'].includes(code)?code:'photo_processing_failed'
