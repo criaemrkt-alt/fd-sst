@@ -31,7 +31,7 @@ export function TechnicianHome({ membership }: { membership: Membership }) {
   const [creating, setCreating] = useState(false)
   const { user, profile } = useAuth()
   const navigate = useNavigate()
-  const { data: appointments = [], isLoading, error } = useQuery({ queryKey: ['technician-appointments', membership.company_id, user?.id], queryFn: () => listAppointments(membership.company_id, user!.id) })
+  const { data: appointments = [], isLoading, error } = useQuery({ networkMode:'always', queryKey: ['technician-appointments', membership.company_id, user?.id], queryFn: () => listAppointments(membership.company_id, user!.id) })
   const today = appointments.filter((item) => new Date(item.starts_at).toDateString() === new Date().toDateString())
   const next = appointments.filter((item) => !['completed', 'cancelled'].includes(item.status)).slice(0, 4)
   return <section className="tech-page tech-page-home">
@@ -46,7 +46,7 @@ export function TechnicianHome({ membership }: { membership: Membership }) {
 export function TechnicianAgendaPage({ membership }: { membership: Membership }) {
   const [creating, setCreating] = useState(false)
   const { user } = useAuth()
-  const { data = [], isLoading, error } = useQuery({ queryKey: ['technician-appointments', membership.company_id, user?.id], queryFn: () => listAppointments(membership.company_id, user!.id) })
+  const { data = [], isLoading, error } = useQuery({ networkMode:'always', queryKey: ['technician-appointments', membership.company_id, user?.id], queryFn: () => listAppointments(membership.company_id, user!.id) })
   const upcoming = data.filter((item) => !['completed', 'cancelled'].includes(item.status))
   const completed = data.filter((item) => ['completed', 'cancelled'].includes(item.status))
   return <section className="tech-page"><header className="tech-title-row"><div><h1>Agenda</h1><p>Seus atendimentos atribuídos e planejados.</p></div><Button onClick={() => setCreating(true)}><Plus size={18} /> Novo</Button></header>{isLoading ? <LoadingState /> : error ? <Notice kind="error">Não foi possível carregar sua agenda.</Notice> : <><section className="card"><div className="section-title"><h2>Em aberto</h2><span>{upcoming.length}</span></div><TechnicianAppointmentList appointments={upcoming} /></section>{completed.length > 0 && <section className="card"><div className="section-title"><h2>Encerrados</h2><span>{completed.length}</span></div><TechnicianAppointmentList appointments={completed} /></section>}</>}{creating && <TechnicianAppointmentModal companyId={membership.company_id} onClose={() => setCreating(false)} />}</section>
@@ -54,7 +54,7 @@ export function TechnicianAgendaPage({ membership }: { membership: Membership })
 
 export function TechnicianActivitiesPage({ membership }: { membership: Membership }) {
   const { user } = useAuth()
-  const { data = [], isLoading, error } = useQuery({ queryKey: ['technician-appointments', membership.company_id, user?.id], queryFn: () => listAppointments(membership.company_id, user!.id) })
+  const { data = [], isLoading, error } = useQuery({ networkMode:'always', queryKey: ['technician-appointments', membership.company_id, user?.id], queryFn: () => listAppointments(membership.company_id, user!.id) })
   const actionable = data.filter((item) => !['completed', 'cancelled'].includes(item.status))
   return <section className="tech-page"><header className="tech-title-row"><div><h1>Atividades</h1><p>Priorize o que precisa ser executado em campo.</p></div></header>{isLoading ? <LoadingState /> : error ? <Notice kind="error">Não foi possível carregar as atividades. Verifique sua conexão e tente novamente.</Notice> : actionable.length ? <section className="card"><div className="section-title"><h2>Para executar</h2><span>{actionable.length}</span></div><TechnicianAppointmentList appointments={actionable} /></section> : <EmptyState title="Tudo em dia">Você não possui atendimentos pendentes. Use “Novo” na agenda quando precisar planejar uma visita.</EmptyState>}</section>
 }

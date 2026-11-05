@@ -30,6 +30,25 @@ export async function localPut(key: string, value: unknown): Promise<void> {
     tx.onerror = () => { db.close(); reject(new Error('Não foi possível salvar no aparelho. Verifique o espaço disponível.')) }
   })
 }
+export async function localFind<T>(prefix: string): Promise<T[]> {
+  const db = await openDatabase()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('kv', 'readonly')
+    const request = tx.objectStore('kv').getAll(IDBKeyRange.bound(prefix, prefix + '\uffff'))
+    request.onsuccess = () => resolve(request.result as T[])
+    tx.onerror = () => reject(tx.error)
+    tx.oncomplete = () => db.close()
+  })
+}
+export async function localRemove(key: string): Promise<void> {
+  const db = await openDatabase()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('kv', 'readwrite')
+    tx.objectStore('kv').delete(key)
+    tx.oncomplete = () => { db.close(); resolve() }
+    tx.onerror = () => { db.close(); reject(tx.error) }
+  })
+}
 const recordKey = (scope: ToolScope, id: string) => `record:${scopeKey(scope)}:${id}`
 function retainLocalPhotos(server: ToolRecord, local?: LocalTool): ToolRecord {
   return { ...server, attachments: server.attachments.map((attachment) => {
