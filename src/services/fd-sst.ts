@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import type { Appointment, Client } from '../types/domain'
+import {localGet,localPut} from './field-tool-store'
 
 function client() {
   if (!supabase) throw new Error('O Supabase ainda não foi configurado.')
@@ -24,6 +25,13 @@ export async function saveClient(input: Partial<Client> & Pick<Client, 'company_
 }
 
 export async function listAppointments(companyId: string, technicianId?: string) {
+  const cacheKey=`technician-agenda:${companyId}:${technicianId}`
+  if(technicianId&&!navigator.onLine){
+    const cached=await localGet<Appointment[]>(cacheKey)
+    if(!cached)throw new Error('Abra sua agenda com internet antes de trabalhar sem conexão.')
+    return cached
+  }
+  const cache=async(rows:Appointment[])=>{if(technicianId)try{await localPut(cacheKey,rows)}catch{/* Online access does not depend on local storage. */}return rows}
   const db = client()
   const withTechnicians = async (appointments: Appointment[]) => {
     if (!appointments.length) return appointments
@@ -60,7 +68,7 @@ export async function listAppointments(companyId: string, technicianId?: string)
       .eq('technician_id', technicianId)
     if (assignmentError) throw assignmentError
     const appointmentIds = (assignments ?? []).map((item) => item.appointment_id)
-    if (!appointmentIds.length) return [] as Appointment[]
+    if (!appointmentIds.length) return cache([])
     const { data, error } = await db
       .from('appointments')
       .select('*, clients(id, name, phone, whatsapp, address_line, cnae_code, cnae_input, business_activity, cnae_description_snapshot, risk_grade)')
@@ -68,7 +76,7 @@ export async function listAppointments(companyId: string, technicianId?: string)
       .in('id', appointmentIds)
       .order('starts_at')
     if (error) throw error
-    return withTechnicians(data as Appointment[])
+    return cache(await withTechnicians(data as Appointment[]))
   }
   const { data, error } = await db
     .from('appointments')
@@ -156,13 +164,21 @@ export async function saveTechnicianFieldRecord(action: string, input: Record<st
   return invokeTechnicianWork<{ ok: true; id?: string }>({ action, ...input })
 }
 
-export async function uploadTechnicianEvidence(input: { companyId: string; appointmentId: string; file: File; observation?: string; locationText?: string; recommendation?: string; additionalNotes?: string; checklistAnswerId?: string; riskLevel?: 'low' | 'medium' | 'high' }) {
+export async function uploadTechnicianEvidence(input: { companyId: string; appointmentId: string; file: File; observation?: string; locationText?: string; recommendation?: string; additionalNotes?: string; checklistAnswerId?: string; riskLevel?: 'low' | 'medium' | 'high'; evidenceId?:string; expectedUserId?:string }) {
+  const sameUser=async()=>{if(input.expectedUserId){const result=await client().auth.getUser();if(result.error||result.data.user?.id!==input.expectedUserId)throw new Error('Entre novamente na mesma conta para sincronizar esta fotografia.')}}
+  await sameUser()
   const safeName = input.file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100)
-  const path = `${input.companyId}/${input.appointmentId}/${crypto.randomUUID()}-${safeName}`
+  const path = `${input.companyId}/${input.appointmentId}/${input.evidenceId||crypto.randomUUID()}-${safeName}`
+  if(input.evidenceId){
+    const existing=await client().from('evidence').select('id,created_by').eq('company_id',input.companyId).eq('appointment_id',input.appointmentId).eq('storage_bucket','fd-sst-evidence').eq('storage_path',path).maybeSingle()
+    if(existing.error)throw existing.error
+    if(existing.data){if(existing.data.created_by!==input.expectedUserId)throw new Error('Esta fotografia pertence a outro registro.');return existing.data.id as string}
+  }
   const storage = client().storage.from('fd-sst-evidence')
   const { error: uploadError } = await storage.upload(path, input.file, { contentType: input.file.type || undefined, upsert: false })
-  if (uploadError) throw uploadError
+  if (uploadError&&!(input.evidenceId&&(String(uploadError.statusCode)==='409'||/already exists|duplicate/i.test(uploadError.message)))) throw uploadError
   try {
+    await sameUser()
     await saveTechnicianFieldRecord('save_evidence', {
       appointment_id: input.appointmentId,
       storage_path: path,
@@ -178,7 +194,7 @@ export async function uploadTechnicianEvidence(input: { companyId: string; appoi
       risk_level: input.riskLevel,
     })
   } catch (error) {
-    await storage.remove([path])
+    if(!input.evidenceId)await storage.remove([path])
     throw error
   }
 }

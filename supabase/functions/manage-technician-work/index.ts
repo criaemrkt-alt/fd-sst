@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.57.4'
 import { corsHeaders } from '../_shared/cors.ts'
 
 type Action = 'create_client' | 'create_appointment' | 'start_appointment' | 'finalize_appointment' | 'save_service' | 'save_function_activity' | 'save_note' | 'attach_checklist' | 'save_checklist_answer' | 'save_evidence' | 'update_evidence' | 'delete_content' | 'save_signature' | 'save_travel' | 'save_accident' | 'save_training' | 'save_heat_assessment'
@@ -248,6 +248,10 @@ Deno.serve(async (request) => {
       if (!path.startsWith(`${appointment.company_id}/${appointment.id}/`) || !str(body.file_name)) return fail('Arquivo de evidência inválido.')
       const media = ['image', 'video', 'document'].includes(str(body.media_kind)) ? str(body.media_kind) : 'document'
       const { data, error } = await admin.from('evidence').insert({ company_id: appointment.company_id, appointment_id: appointment.id, checklist_answer_id: nullable(body.checklist_answer_id), storage_bucket: 'fd-sst-evidence', storage_path: path, file_name: str(body.file_name), content_type: nullable(body.content_type), byte_size: finite(body.byte_size), media_kind: media, risk_level: validRisk(body.risk_level), observation: nullable(body.observation), location_text: nullable(body.location_text), recommendation: nullable(body.recommendation), additional_notes: nullable(body.additional_notes), created_by: user.id, updated_by: user.id }).select('id').single()
+      if(error?.code==='23505'){
+        const existing=await admin.from('evidence').select('id').eq('appointment_id',appointment.id).eq('storage_bucket','fd-sst-evidence').eq('storage_path',path).eq('created_by',user.id).maybeSingle()
+        if(!existing.error&&existing.data)return json({ok:true,id:existing.data.id,already_saved:true})
+      }
       if (error) return fail(error.message)
       await audit(appointment.company_id, 'evidence', data.id, 'attendance_evidence_added')
       return json({ ok: true, id: data.id })
