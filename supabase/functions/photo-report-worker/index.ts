@@ -1,5 +1,5 @@
 import {createClient} from 'npm:@supabase/supabase-js@2.57.4'
-import {cloudflareVision} from './providers.ts'
+import {openAiVision,openAiSimulation} from './openai.ts'
 import {annotate,workingImage} from './images.ts'
 import {assemblePowerPoint} from './powerpoint.ts'
 import {reportIsPartial} from './core.ts'
@@ -7,7 +7,9 @@ const env=(key:string)=>Deno.env.get(key)
 const db=createClient(env('SUPABASE_URL')!,env('SUPABASE_SERVICE_ROLE_KEY')!)
 const bucket='fd-sst-ai-reports'
 const checked=async(p:PromiseLike<any>)=>{const result=await p;if(result.error)throw result.error;return result.data}
-const vision=cloudflareVision(env,async()=>{const {error}=await db.rpc('record_photo_report_call');if(error)throw error})
+const recordAiAttempt=async()=>{const {error}=await db.rpc('record_photo_report_call');if(error)throw error}
+const vision=openAiVision(env,recordAiAttempt)
+const simulator=openAiSimulation(env,recordAiAttempt)
 Deno.serve(async(request:Request)=>{
  if(request.method!=='POST')return new Response('Method not allowed',{status:405})
  const body=await request.json().catch(()=>({}))
@@ -45,7 +47,24 @@ Deno.serve(async(request:Request)=>{
      const annotated=await workingImage(await annotate(image,analysis.findings).encodeJPEG(55))
      await checked(db.storage.from(bucket).upload(annotatedPath,annotated.jpeg,{contentType:'image/jpeg',upsert:true}))
     }
-    await checked(db.from('photo_report_items').update({status:'done',analysis,work_path:workPath,thumbnail_path:thumbnailPath,annotated_path:annotatedPath,model:analysis.status==='analyzed'?'@cf/meta/llama-3.2-11b-vision-instruct':null,error_code:null,attempts:item.attempts+1}).eq('id',item.id))
+    let simulationPath=null
+    if(analysis.status==='analyzed'&&analysis.findings.some(f=>f.simulate&&f.box)){
+     try{
+      const generated=await simulator.edit(jpeg,analysis)
+      if(generated){
+       const output=await workingImage(generated)
+       simulationPath=`${prefix}/simulations/${item.id}.jpg`
+       await checked(db.storage.from(bucket).upload(simulationPath,output.jpeg,{contentType:'image/jpeg',upsert:true}))
+       analysis.simulation_status='generated'
+      }
+     }catch(error){
+      analysis.simulation_status='failed'
+      const code=error instanceof Error&&/^(quota_exhausted|image_http_\\d{3}|invalid_image_response|image_output_too_large)$/.test(error.message)?error.message:'simulation_processing_failed'
+      console.error(JSON.stringify({job_id:job.id,item_id:item.id,error_code:code}))
+      warning='Uma simulação ilustrativa não pôde ser gerada. Os registros originais permanecem disponíveis.'
+     }
+    }
+    await checked(db.from('photo_report_items').update({status:'done',analysis,work_path:workPath,thumbnail_path:thumbnailPath,annotated_path:annotatedPath,simulation_path:simulationPath,model:analysis.status==='analyzed'?(env('OPENAI_VISION_MODEL')?.trim()||'gpt-6-luna'):null,error_code:null,attempts:item.attempts+1}).eq('id',item.id))
    }catch(error){
     const code=error instanceof Error?error.message:'photo_processing_failed'
     if(code==='quota_exhausted'){

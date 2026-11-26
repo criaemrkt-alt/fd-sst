@@ -4,6 +4,7 @@ import {writeFile} from 'node:fs/promises'
 import process from 'node:process'
 import {validateAnalysis,reportIsPartial,unavailableAnalysis} from './core.ts'
 import {cloudflareVision} from './providers.ts'
+import {openAiVision,openAiSimulation} from './openai.ts'
 import {annotate,workingImage} from './images.ts'
 import {assemblePowerPoint} from './powerpoint.ts'
 const assert=(condition:unknown,message:string)=>{if(!condition)throw new Error(message)}
@@ -93,4 +94,66 @@ Deno.test('100-photo assembly with high entropy JPEGs stays within storage budge
  assert(bytes.length<48*1024*1024,'storage budget')
  assert(Object.keys(zip.files).filter(p=>/^ppt\/slides\/slide\d+\.xml$/.test(p)).length>=100,'all slides exist')
  console.log(JSON.stringify({stress_photos:100,jpeg_bytes:jpeg.length,pptx_bytes:bytes.length,assembly_ms:Math.round(performance.now()-started)}))
+})
+
+Deno.test('OpenAI vision stays disabled until a server-side key and opt-in exist',async()=>{
+ let attempts=0,requests=0
+ const fetchOriginal=globalThis.fetch
+ try{
+  globalThis.fetch=async()=>{requests++;throw new Error('must not call API')}
+  const vision=openAiVision(()=>undefined,async()=>{attempts++})
+  const result=await vision.analyze(new Uint8Array([1,2,3]),'p')
+  assert(result.status==='unavailable'&&attempts===0&&requests===0,'disabled OpenAI must be zero cost')
+  const simulate=openAiSimulation(()=>undefined,async()=>{attempts++})
+  assert(await simulate.edit(new Uint8Array([1,2,3]),validateAnalysis(fixture(),'p'))===null,'edits remain disabled')
+ }finally{globalThis.fetch=fetchOriginal}
+})
+Deno.test('OpenAI Luna returns parsed vision findings and handles provider quota',async()=>{
+ const env:Record<string,string>={OPENAI_AI_ENABLED:'true',OPENAI_API_KEY:'fake_test_key'}
+ let requests=0,reserves=0
+ const originalFetch=globalThis.fetch
+ try{
+  globalThis.fetch=async(_input,init)=>{
+   requests++
+   const sent=JSON.parse(String(init?.body))
+   assert(sent.model==='gpt-6-luna','expected Luna')
+   assert(sent.store===false,'photo analysis must not be stored as a response')
+   assert(sent.input?.[0]?.content?.[1]?.image_url?.startsWith('data:image/jpeg;base64,'),'image sent privately')
+   assert(sent.text?.format?.type==='json_schema','strict JSON required')
+   return Response.json({output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(fixture())}]}]})
+  }
+  const provider=openAiVision(k=>env[k],async()=>{reserves++})
+  const data=await provider.analyze(new Uint8Array([1,2,3]),'p')
+  assert(data.status==='analyzed'&&data.findings.length===1,'parsed real analysis response')
+  assert(requests===1&&reserves===1,'one call recorded')
+  globalThis.fetch=async()=>new Response('',{status:429})
+  let paused=false
+  try{await provider.analyze(new Uint8Array([1,2,3]),'p')}catch(e){paused=(e as Error).message==='quota_exhausted'}
+  assert(paused,'quota must pause safely')
+ }finally{globalThis.fetch=originalFetch}
+})
+Deno.test('OpenAI image editor only runs for enabled, locatable, high-confidence findings',async()=>{
+ const env:Record<string,string>={OPENAI_AI_ENABLED:'true',OPENAI_API_KEY:'fake_test_key',OPENAI_SIMULATION_ENABLED:'true'}
+ let requests=0
+ const originalFetch=globalThis.fetch
+ const edited=await new Image(32,32).fill(0x444444ff).encodeJPEG(55)
+ const b64=btoa(String.fromCharCode(...edited))
+ try{
+  globalThis.fetch=async(_input,init)=>{
+   requests++
+   assert(String(_input).endsWith('/images/edits'),'uses actual image edits')
+   assert(init?.body instanceof FormData,'image request uses multipart')
+   assert((init.body as FormData).get('model')==='gpt-image-2.6-flare','model chosen')
+   return Response.json({data:[{b64_json:b64}]})
+  }
+  const provider=openAiSimulation(k=>env[k],async()=>undefined)
+  const uncertain=validateAnalysis(fixture(.5),'p')
+  uncertain.findings[0].simulate=true
+  assert(await provider.edit(new Uint8Array([1,2,3]),uncertain)===null,'uncertain region cannot be edited')
+  const analysis=validateAnalysis({...fixture(),findings:[{...fixture().findings[0],simulate:true}]},'p')
+  const data=await provider.edit(new Uint8Array([1,2,3]),analysis)
+  assert(data?.[0]===255&&requests===1,'one illustrative edit, JPEG returned')
+  env.OPENAI_SIMULATION_ENABLED='false'
+  assert(await provider.edit(new Uint8Array([1,2,3]),analysis)===null&&requests===1,'safe opt-out')
+ }finally{globalThis.fetch=originalFetch}
 })
