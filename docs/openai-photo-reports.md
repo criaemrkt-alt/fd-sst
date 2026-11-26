@@ -59,3 +59,30 @@ teste sintético de código não demonstra que o provedor já respondeu.
 - Verificar manualmente segurança das sugestões e fidelidade das imagens simuladas; não aprovar simulações de máquina/instalação como projeto técnico sem revisão.
 - Testar foto real e navegação no celular com autenticação para confirmar o download.
 - Nenhum PDF ou envio por e-mail é criado; entrega ocorre no site em .pptx.
+
+## Simular todas as fotografias analisadas (26/11/2026)
+
+A pedido do responsável pela FD, a simulação deixa de depender de `simulate=true`,
+confiança >= 0,9 ou caixa delimitadora. **Toda foto com análise concluída**
+recebe uma tentativa de edição via `gpt-image-2.6-flare` quando a configuração
+privada de simulação está habilitada. Não é necessário criar uma ação extra
+para o técnico: o processamento é automático na fila existente.
+
+- Se a IA encontrar uma correção visual justificável, pede uma versão ilustrativa
+  de adequação preservando o restante do cenário.
+- Se nenhuma correção for identificável, a versão ilustrativa deve preservar a
+  aparência da fotografia, sem inventar defeitos, condições perigosas ou mudanças
+  inexistentes. Isso evita falsificar evidências de inspeção.
+- A original jamais é substituída: os slides identificam explicitamente a
+  simulação como uma imagem **gerada por IA, não comprovação de correção**.
+- Erros de API podem impedir o resultado de determinada foto. A fila permite
+  retentativas para 429 e erros transitórios do provedor, usando a análise salva
+  para evitar repetir custos de visão. O relatório deverá ficar **parcial** caso
+  falte a simulação de qualquer fotografia analisada.
+- Para 100 fotos, o procedimento poderá consumir até 100 análises e 100 edições,
+  além de retentativas; o consumo será cobrado pela API. Verifique o orçamento e
+  teste com apenas uma fotografia autorizada antes de uso real.
+
+**Status:** testes automatizados sintéticos não confirmam que a API real já
+respondeu na conta da FD. É necessário um atendimento de teste com uma foto,
+verificando `analysis.status`, `simulation_path`, o PPTX e o consumo.
