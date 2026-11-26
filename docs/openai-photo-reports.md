@@ -10,6 +10,30 @@ Este documento descreve a branch de integração, **não certifica que a produç
 - Simulação: **ilustrativa e sujeita a revisão técnica**, nunca prova de uma adequação executada.
 - As fotos são processadas uma por execução da fila, evitando explosão simultânea de chamadas. Estima-se cerca de 101 ciclos de um minuto para 100 fotos, além de eventuais edições e esperas.
 
+## Ativação protegida via banco (26/11/2026)
+
+A partir da migração `20261126111356_activate_openai_photo_analysis_flags.sql`,
+o worker não precisa do segredo `OPENAI_AI_ENABLED`: ele lê uma configuração
+privada do PostgreSQL a cada foto. Somente `service_role` pode invocar a
+função de leitura `public.get_photo_report_ai_flags()`; `anon` e
+`authenticated` não podem.
+
+Após a autorização do responsável, o banco foi configurado com
+`ai_analysis_enabled = true` e `ai_simulation_enabled = false`.
+A chave `OPENAI_API_KEY` continua exclusivamente nos segredos da Edge
+Function, sem possibilidade de leitura pelo banco ou pelo navegador.
+
+O valor do controle pode ser revogado pelo administrador do banco:
+```sql
+update private.photo_report_configuration
+set ai_analysis_enabled=false, ai_simulation_enabled=false where id=true;
+```
+
+Para simulações futuras, uma autorização separada será necessária antes de
+habilitar `ai_simulation_enabled=true`. A homologação real ainda requer
+novo atendimento com uma fotografia autorizada e créditos API disponíveis;
+teste sintético de código não demonstra que o provedor já respondeu.
+
 ## Configuração no projeto FD SST
 1. Criar chave restrita à API num projeto próprio em https://platform.openai.com/api-keys. A assinatura do ChatGPT não equivale à cobrança da API. Confira créditos disponíveis e limite de uso no painel antes de habilitar.
 2. Abrir https://supabase.com/dashboard/project/cperyeyppyhpzyjafqtp/functions/secrets. Nunca colocar tokens em .env público, GitHub ou mensagens.
