@@ -132,28 +132,38 @@ Deno.test('OpenAI Luna returns parsed vision findings and handles provider quota
   assert(paused,'quota must pause safely')
  }finally{globalThis.fetch=originalFetch}
 })
-Deno.test('OpenAI image editor only runs for enabled, locatable, high-confidence findings',async()=>{
+Deno.test('every analyzed photo requests a simulated image, including uncertain and empty findings',async()=>{
  const env:Record<string,string>={OPENAI_AI_ENABLED:'true',OPENAI_API_KEY:'fake_test_key',OPENAI_SIMULATION_ENABLED:'true'}
- let requests=0
+ let requests=0,records=0,emptyPrompt=false,uncertainPrompt=false
  const originalFetch=globalThis.fetch
  const edited=await new Image(32,32).fill(0x444444ff).encodeJPEG(55)
  const b64=btoa(String.fromCharCode(...edited))
  try{
   globalThis.fetch=async(_input,init)=>{
    requests++
-   assert(String(_input).endsWith('/images/edits'),'uses actual image edits')
+   assert(String(_input).endsWith('/images/edits'),'uses image-edit endpoint')
    assert(init?.body instanceof FormData,'image request uses multipart')
-   assert((init.body as FormData).get('model')==='gpt-image-2.6-flare','model chosen')
+   const data=init.body as FormData
+   assert(data.get('model')==='gpt-image-2.6-flare','image model')
+   const prompt=String(data.get('prompt'))
+   assert(prompt.includes('SIMULAÇÃO ILUSTRATIVA'),'simulation is explicitly labeled')
+   if(prompt.includes('não identificou uma alteração visual específica'))emptyPrompt=true
+   if(prompt.includes('"confidence":0.5'))uncertainPrompt=true
    return Response.json({data:[{b64_json:b64}]})
   }
-  const provider=openAiSimulation(k=>env[k],async()=>undefined)
+  const provider=openAiSimulation(k=>env[k],async()=>{records++})
   const uncertain=validateAnalysis(fixture(.5),'p')
-  uncertain.findings[0].simulate=true
-  assert(await provider.edit(new Uint8Array([1,2,3]),uncertain)===null,'uncertain region cannot be edited')
-  const analysis=validateAnalysis({...fixture(),findings:[{...fixture().findings[0],simulate:true}]},'p')
-  const data=await provider.edit(new Uint8Array([1,2,3]),analysis)
-  assert(data?.[0]===255&&requests===1,'one illustrative edit, JPEG returned')
+  assert(uncertain.findings[0].box===null,'uncertain findings remain unmarked')
+  const result1=await provider.edit(new Uint8Array([1,2,3]),uncertain)
+  assert(result1?.[0]===255,'uncertain image still receives an edit')
+  const empty=validateAnalysis({findings:[],note:'Nenhum problema visível'},'photo')
+  const result2=await provider.edit(new Uint8Array([1,2,3]),empty)
+  assert(result2?.[0]===255,'even empty findings receive faithful simulation')
+  assert(requests===2&&records===2&&emptyPrompt&&uncertainPrompt,'both API attempts counted and safety instructions present')
+  assert(reportIsPartial([{status:'done',analysis:empty}]),'analyzed photo without image is partial')
+  empty.simulation_status='generated'
+  assert(!reportIsPartial([{status:'done',analysis:empty}]),'analyzed photo with simulation is complete')
   env.OPENAI_SIMULATION_ENABLED='false'
-  assert(await provider.edit(new Uint8Array([1,2,3]),analysis)===null&&requests===1,'safe opt-out')
+  assert(await provider.edit(new Uint8Array([1,2,3]),empty)===null&&requests===2,'disabling editing still prevents API charges')
  }finally{globalThis.fetch=originalFetch}
 })
