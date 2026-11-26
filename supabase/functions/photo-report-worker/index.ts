@@ -8,8 +8,8 @@ const db=createClient(env('SUPABASE_URL')!,env('SUPABASE_SERVICE_ROLE_KEY')!)
 const bucket='fd-sst-ai-reports'
 const checked=async(p:PromiseLike<any>)=>{const result=await p;if(result.error)throw result.error;return result.data}
 const recordAiAttempt=async()=>{const {error}=await db.rpc('record_photo_report_call');if(error)throw error}
-const vision=openAiVision(env,recordAiAttempt)
-const simulator=openAiSimulation(env,recordAiAttempt)
+// AI activation is read from a protected database setting for each image.
+// API secrets remain in Supabase Edge Function environment variables.
 Deno.serve(async(request:Request)=>{
  if(request.method!=='POST')return new Response('Method not allowed',{status:405})
  const body=await request.json().catch(()=>({}))
@@ -39,6 +39,16 @@ Deno.serve(async(request:Request)=>{
     await checked(db.storage.from(bucket).upload(thumbnailPath,await thumb.encodeJPEG(50),{contentType:'image/jpeg',upsert:true}))
     // Keep a readable original slide even if the external model fails later.
     await checked(db.from('photo_report_items').update({work_path:workPath,thumbnail_path:thumbnailPath}).eq('id',item.id))
+    // The server-side control is visible to the service role only.
+    // No credentials or activation controls are ever exposed to browser clients.
+    const flags=await checked(db.rpc('get_photo_report_ai_flags'))
+    const runtimeEnv=(key:string)=>{
+     if(key==='OPENAI_AI_ENABLED')return flags?.vision===true?'true':'false'
+     if(key==='OPENAI_SIMULATION_ENABLED')return flags?.simulation===true?'true':'false'
+     return env(key)
+    }
+    const vision=openAiVision(runtimeEnv,recordAiAttempt)
+    const simulator=openAiSimulation(runtimeEnv,recordAiAttempt)
     const analysis=await vision.analyze(jpeg,item.evidence_id)
     if(analysis.status==='unavailable')warning=analysis.note
     let annotatedPath=null
