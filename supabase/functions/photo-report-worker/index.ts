@@ -49,7 +49,12 @@ Deno.serve(async(request:Request)=>{
     }
     const vision=openAiVision(runtimeEnv,recordAiAttempt)
     const simulator=openAiSimulation(runtimeEnv,recordAiAttempt)
-    const analysis=await vision.analyze(jpeg,item.evidence_id)
+    // Reuse a successful vision analysis after a transient image-edit failure,
+    // preventing unnecessary repeat charges for the same photo.
+    const analysis=item.analysis?.status==='analyzed'
+     ? item.analysis
+     : await vision.analyze(jpeg,item.evidence_id)
+    if(analysis.status==='analyzed')await checked(db.from('photo_report_items').update({analysis}).eq('id',item.id))
     if(analysis.status==='unavailable')warning=analysis.note
     let annotatedPath=null
     if(analysis.findings.some(f=>f.box)){
@@ -58,7 +63,9 @@ Deno.serve(async(request:Request)=>{
      await checked(db.storage.from(bucket).upload(annotatedPath,annotated.jpeg,{contentType:'image/jpeg',upsert:true}))
     }
     let simulationPath=null
-    if(analysis.status==='analyzed'&&analysis.findings.some(f=>f.simulate&&f.box)){
+    // Try an illustrative image edit for every analyzed photo, even when
+    // no risk box or high confidence finding is available.
+    if(analysis.status==='analyzed'){
      try{
       const generated=await simulator.edit(jpeg,analysis)
       if(generated){
@@ -66,11 +73,16 @@ Deno.serve(async(request:Request)=>{
        simulationPath=`${prefix}/simulations/${item.id}.jpg`
        await checked(db.storage.from(bucket).upload(simulationPath,output.jpeg,{contentType:'image/jpeg',upsert:true}))
        analysis.simulation_status='generated'
+      }else{
+       analysis.simulation_status='not_configured'
+       warning='Simulação não executada: o serviço de imagens não está disponível.'
       }
      }catch(error){
+      const code=error instanceof Error?error.message:'simulation_processing_failed'
+      // Allow the existing queue to pause for quota or retry transient provider failures.
+      if(code==='quota_exhausted'||/^image_http_5\d\d$/.test(code))throw error
       analysis.simulation_status='failed'
-      const code=error instanceof Error&&/^(quota_exhausted|image_http_\\d{3}|invalid_image_response|image_output_too_large)$/.test(error.message)?error.message:'simulation_processing_failed'
-      console.error(JSON.stringify({job_id:job.id,item_id:item.id,error_code:code}))
+      console.error(JSON.stringify({job_id:job.id,item_id:item.id,error_code:/^image_http_\d{3}$/.test(code)?code:'simulation_processing_failed'}))
       warning='Uma simulação ilustrativa não pôde ser gerada. Os registros originais permanecem disponíveis.'
      }
     }
@@ -81,7 +93,7 @@ Deno.serve(async(request:Request)=>{
      await checked(db.from('photo_report_items').update({attempts:item.attempts}).eq('id',item.id))
      await checked(db.from('photo_report_jobs').update({lease_until:null,next_attempt_at:new Date(Date.now()+3600000).toISOString(),error_code:'quota_exhausted',warning:'Cota de IA atingida. Processamento pausado para nova tentativa.'}).eq('id',job.id));return Response.json({paused:true})
     }
-    const safeCode=/^vision_http_\d{3}$/.test(code)||['invalid_model_schema','invalid_finding_fields','working_copy_size_limit','photo_exceeds_worker_memory_budget'].includes(code)?code:'photo_processing_failed'
+    const safeCode=/^(vision|image)_http_\d{3}$/.test(code)||['invalid_model_schema','invalid_finding_fields','working_copy_size_limit','photo_exceeds_worker_memory_budget'].includes(code)?code:'photo_processing_failed'
     console.error(JSON.stringify({job_id:job.id,item_id:item.id,error_code:safeCode}))
     await checked(db.from('photo_report_items').update({attempts:item.attempts+1,status:item.attempts>=2?'failed':'pending',error_code:safeCode}).eq('id',item.id))
    }
